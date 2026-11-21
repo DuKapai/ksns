@@ -1,6 +1,6 @@
 import { Inject, Injectable, InjectionToken } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Observable, tap } from 'rxjs';
+import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
+import { map, Observable, tap } from 'rxjs';
 
 export interface User {
   id: string; username: string; employeeCode: string; fullName: string; position: string;
@@ -15,8 +15,13 @@ export class ApiService {
   get token(): string { return localStorage.getItem('ksnk_token') || ''; }
   get user(): User | null { try { return JSON.parse(localStorage.getItem('ksnk_user') || 'null') as User | null; } catch { return null; } }
   headers(): HttpHeaders { return new HttpHeaders({ Authorization: `Bearer ${this.token}` }); }
-  login(username: string, password: string, portal: string): Observable<{ token: string; user: User }> {
-    return this.http.post<{ token: string; user: User }>(`${this.base}/auth/login`, { username, password, portal }).pipe(tap(result => {
+  login(username: string, password: string, portal: string, requiredRole?: string): Observable<{ token: string; user: User }> {
+    return this.http.post<{ token: string; user: User }>(`${this.base}/auth/login`, { username, password, portal }).pipe(map(result => {
+      if (requiredRole && !result.user.roles.includes(requiredRole)) {
+        throw new HttpErrorResponse({ status: 403, error: { message: 'Tài khoản không thuộc vai trò đã chọn. Vui lòng chọn đúng vai trò hoặc trở lại trang chủ.' } });
+      }
+      return result;
+    }), tap(result => {
       localStorage.setItem('ksnk_token', result.token); localStorage.setItem('ksnk_user', JSON.stringify(result.user)); localStorage.setItem('ksnk_portal', portal);
     }));
   }

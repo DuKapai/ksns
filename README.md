@@ -4,7 +4,7 @@
 
 ## Demo trực tuyến
 
-Mở [KSNK Network trên GitHub Pages](https://dukapai.github.io/ksns/). Chọn **Bác sĩ mạng lưới** để ghi nhận tại khoa hoặc **Khoa KSNK-PCBT** để theo dõi toàn mạng lưới; mỗi nút tự đăng nhập bằng tài khoản demo tương ứng. Các tài khoản điều dưỡng, trưởng khoa và thư ký vẫn có trong **Tài khoản khác / đăng nhập thủ công**.
+Mở [KSNK Network trên GitHub Pages](https://dukapai.github.io/ksns/). Chọn **Bác sĩ mạng lưới** hoặc **Khoa KSNK-PCBT**, rồi nhập tài khoản và mật khẩu demo ở màn đăng nhập. Các tài khoản điều dưỡng, trưởng khoa và thư ký vẫn có trong **Tài khoản demo khác**.
 
 Bản web chạy hoàn toàn trong trình duyệt, không kết nối máy chủ hay dữ liệu bệnh viện. Dữ liệu mỗi trình duyệt lưu riêng, không đồng bộ giữa người dùng hoặc thiết bị; xóa dữ liệu trang web hoặc dùng chế độ riêng tư có thể làm mất dữ liệu. Để bắt đầu lại, xóa dữ liệu trang web `dukapai.github.io` trong cài đặt trình duyệt (việc này cũng có thể xóa dữ liệu các trang khác cùng tên miền). Không nhập dữ liệu người bệnh hoặc tài khoản thật. Vai trò và đăng nhập chỉ mô phỏng trong trình duyệt, không cung cấp bảo mật cho triển khai thực tế.
 
