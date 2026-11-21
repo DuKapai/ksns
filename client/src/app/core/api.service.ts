@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Inject, Injectable, InjectionToken } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable, tap } from 'rxjs';
 
@@ -7,10 +7,11 @@ export interface User {
   departmentCode: string; departmentName: string; roles: string[]; active: boolean;
 }
 
+export const API_BASE = new InjectionToken<string>('API_BASE', { providedIn: 'root', factory: () => 'http://localhost:3000/api' });
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
-  readonly base = 'http://localhost:3000/api';
-  constructor(private http: HttpClient) { }
+  constructor(private http: HttpClient, @Inject(API_BASE) readonly base: string) { }
   get token(): string { return localStorage.getItem('ksnk_token') || ''; }
   get user(): User | null { try { return JSON.parse(localStorage.getItem('ksnk_user') || 'null') as User | null; } catch { return null; } }
   headers(): HttpHeaders { return new HttpHeaders({ Authorization: `Bearer ${this.token}` }); }

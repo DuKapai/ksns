@@ -1,6 +1,14 @@
 # KSNK Network – Demo quản lý Mạng lưới Kiểm soát nhiễm khuẩn
 
-Ứng dụng demo Angular + Node.js, chưa yêu cầu SQL/database. Dữ liệu demo được lưu ở `server/data/demo-store.json` bằng JSON để thử luồng nghiệp vụ. Backend là nơi duy nhất đọc/ghi dữ liệu; Angular không kết nối trực tiếp HIS.
+Ứng dụng demo Angular + Node.js, chưa yêu cầu SQL/database và chưa kết nối HIS.
+
+## Demo trực tuyến
+
+Mở [KSNK Network trên GitHub Pages](https://dukapai.github.io/ksns/). Chọn phân hệ và tài khoản demo ở mục 2.
+
+Bản web chạy hoàn toàn trong trình duyệt, không kết nối máy chủ hay dữ liệu bệnh viện. Dữ liệu mỗi trình duyệt lưu riêng, không đồng bộ giữa người dùng hoặc thiết bị; xóa dữ liệu trang web hoặc dùng chế độ riêng tư có thể làm mất dữ liệu. Để bắt đầu lại, xóa dữ liệu trang web `dukapai.github.io` trong cài đặt trình duyệt (việc này cũng có thể xóa dữ liệu các trang khác cùng tên miền). Không nhập dữ liệu người bệnh hoặc tài khoản thật. Vai trò và đăng nhập chỉ mô phỏng trong trình duyệt, không cung cấp bảo mật cho triển khai thực tế.
+
+Để dựng lại bản Pages, cài dependencies rồi chạy `npm run build:pages` trong `client`; xuất nội dung `client/dist/ksnk-demo/browser` vào thư mục gốc của nhánh `main` đang được GitHub Pages sử dụng, cùng file `.nojekyll`. Đường dẫn gốc `/ksns/` được cấu hình cho repository này. Chạy `node --test pages-demo/browser-api.test.mjs` trong `client` sau khi build để kiểm tra adapter. Bản này tái sử dụng nghiệp vụ server qua adapter trình duyệt; đây không phải API bảo mật.
 
 ## 1. Chạy thử nhanh
 
@@ -48,12 +56,12 @@ Dữ liệu nhân sự và khoa/phòng trong bản công khai đều là giả l
 - Số nguy cơ trong báo cáo bác sĩ được tính theo tháng tạo phiếu tại múi giờ Việt Nam; trạng thái mở/đóng là trạng thái khi tổng hợp, không phải số vấn đề được đóng trong tháng.
 - Nguy cơ cao phải báo **ngay bằng kênh trực tiếp** cho lãnh đạo khoa, KSNK-PCBT và cấp có thẩm quyền; việc nhập phiếu không gửi thông báo, không thay thế xử trí chuyên môn.
 - Trang chủ chọn một trong ba phân hệ: Thành viên mạng lưới, Trưởng khoa, Khoa KSNK-PCBT.
-- Đăng nhập; backend kiểm tra vai trò được gán. Chọn phân hệ không tự cấp quyền.
+- Đăng nhập; chế độ Node kiểm tra vai trò tại backend, còn bản Pages chỉ mô phỏng kiểm tra tại trình duyệt. Chọn phân hệ không tự cấp quyền.
 - Thành viên: xem nhiệm vụ, tạo phiếu giám sát, báo cáo nguy cơ/sự cố, xem tình trạng khắc phục, lập báo cáo tháng.
 - Trưởng khoa: xem hoạt động của khoa, tiếp nhận nguy cơ, giao/ghi nhận khắc phục và gửi xác nhận hoàn thành.
 - KSNK-PCBT: xem tổng quan toàn viện, quản lý thành viên, theo dõi nguy cơ, kiểm tra lại/đóng vấn đề, xem báo cáo và xuất CSV.
 - Vòng đời nguy cơ: Mới ghi nhận → Đã tiếp nhận → Đang khắc phục → Chờ kiểm tra lại → Đã đóng. Nguy cơ cao được gắn cảnh báo cần báo ngay.
-- Nhật ký thao tác cơ bản và dữ liệu JSON tập trung ở backend.
+- Nhật ký thao tác cơ bản lưu cùng dữ liệu demo (trong trình duyệt ở bản Pages, hoặc trong backend khi chạy Node).
 
 ## 4. Căn cứ nghiệp vụ
 

@@ -9,3 +9,4 @@ server/test/surveillance-*.json
 .env.*
 !.env.example
 .DS_Store
+client/src/demo-api.generated.mjs

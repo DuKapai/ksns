@@ -15,7 +15,7 @@ import { RouterLink } from '@angular/router';
           <a class="portal-card" routerLink="/login/ksnk"><div class="portal-top"><span class="portal-icon icon-green">✚</span><span class="portal-arrow">↗</span></div><div class="portal-index">03 / KSNK CONTROL</div><h3>Khoa KSNK-PCBT</h3><p>Điều phối mạng lưới, hướng dẫn chuyên môn, kiểm tra lại và tổng hợp báo cáo toàn viện.</p><div class="portal-footer"><span>Đầu mối chuyên môn toàn viện</span><b>Vào phân hệ <i>→</i></b></div></a>
         </div>
       </section>
-      <section class="landing-note"><span class="note-icon">ⓘ</span><div><b>Quyền truy cập được xác định theo tài khoản</b><p>Việc chọn phân hệ chỉ xác định khu vực đăng nhập. Hệ thống kiểm tra vai trò và phạm vi khoa được cấp trước khi cho phép truy cập.</p></div><span class="note-tag">SECURE ACCESS</span></section>
+      <section class="landing-note"><span class="note-icon">ⓘ</span><div><b>Phân hệ theo tài khoản demo</b><p>Việc chọn phân hệ chỉ xác định khu vực đăng nhập. Vai trò và phạm vi khoa được mô phỏng để giới thiệu nghiệp vụ.</p></div><span class="note-tag">DEMO</span></section>
     </main>
     <footer class="landing-footer"><span>© 2026 · Mạng lưới Kiểm soát nhiễm khuẩn</span><span>Đề xuất: Nguyễn Mạnh Hiếu · Triển khai: Nguyễn Hoàng Dũng</span></footer>
   </div>`
