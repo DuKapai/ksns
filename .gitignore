@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.angular/
+.env
+server/data/*.tmp
+server/data/demo-store.json
+server/test/store-*.json
+server/test/surveillance-*.json
+.env.*
+!.env.example
+.DS_Store

@@ -1,0 +1,291 @@
+{
+  "users": [
+    {
+      "id": "u1",
+      "username": "bs.nguyen",
+      "password": "Demo@123",
+      "employeeCode": "DEMO-BS-001",
+      "fullName": "BS. Nguyễn Minh An",
+      "position": "Bác sĩ điều trị",
+      "departmentCode": "DEMO-A",
+      "departmentName": "Khoa A (mô phỏng)",
+      "roles": [
+        "MEMBER_DOCTOR"
+      ],
+      "active": true
+    },
+    {
+      "id": "u2",
+      "username": "dd.tran",
+      "password": "Demo@123",
+      "employeeCode": "DEMO-DD-001",
+      "fullName": "ĐD. Trần Thu Hà",
+      "position": "Điều dưỡng",
+      "departmentCode": "DEMO-A",
+      "departmentName": "Khoa A (mô phỏng)",
+      "roles": [
+        "MEMBER_NURSE"
+      ],
+      "active": true
+    },
+    {
+      "id": "u3",
+      "username": "truongkhoa.noi",
+      "password": "Demo@123",
+      "employeeCode": "DEMO-TK-001",
+      "fullName": "BS. Lê Quốc Bình",
+      "position": "Trưởng khoa",
+      "departmentCode": "DEMO-A",
+      "departmentName": "Khoa A (mô phỏng)",
+      "roles": [
+        "DEPARTMENT_HEAD"
+      ],
+      "active": true
+    },
+    {
+      "id": "u4",
+      "username": "ksnk.admin",
+      "password": "Demo@123",
+      "employeeCode": "DEMO-KSNK-001",
+      "fullName": "CN. Phạm Thu Hương",
+      "position": "Nhân viên Khoa KSNK-PCBT",
+      "departmentCode": "DEMO-K",
+      "departmentName": "Khoa KSNK (mô phỏng)",
+      "roles": [
+        "KSNK_ADMIN"
+      ],
+      "active": true
+    },
+    {
+      "id": "u5",
+      "username": "thuky.ksnk",
+      "password": "Demo@123",
+      "employeeCode": "DEMO-KSNK-001",
+      "fullName": "CN. Phạm Thu Hương",
+      "position": "Thư ký mạng lưới",
+      "departmentCode": "DEMO-K",
+      "departmentName": "Khoa KSNK (mô phỏng)",
+      "roles": [
+        "NETWORK_SECRETARY"
+      ],
+      "active": true
+    }
+  ],
+  "members": [
+    {
+      "id": "m1",
+      "employeeCode": "DEMO-BS-001",
+      "fullName": "BS. Nguyễn Minh An",
+      "position": "Bác sĩ",
+      "departmentCode": "DEMO-A",
+      "departmentName": "Khoa A (mô phỏng)",
+      "memberType": "Bác sĩ",
+      "networkTitle": "Thành viên mạng lưới",
+      "active": true
+    },
+    {
+      "id": "m2",
+      "employeeCode": "DEMO-DD-001",
+      "fullName": "ĐD. Trần Thu Hà",
+      "position": "Điều dưỡng",
+      "departmentCode": "DEMO-A",
+      "departmentName": "Khoa A (mô phỏng)",
+      "memberType": "Điều dưỡng",
+      "networkTitle": "Thành viên mạng lưới",
+      "active": true
+    },
+    {
+      "id": "m3",
+      "employeeCode": "DEMO-TK-001",
+      "fullName": "BS. Lê Quốc Bình",
+      "position": "Trưởng khoa",
+      "departmentCode": "DEMO-A",
+      "departmentName": "Khoa A (mô phỏng)",
+      "memberType": "Lãnh đạo đơn vị",
+      "networkTitle": "Trưởng khoa",
+      "active": true
+    },
+    {
+      "id": "m4",
+      "employeeCode": "DEMO-KSNK-001",
+      "fullName": "CN. Phạm Thu Hương",
+      "position": "Nhân viên KSNK",
+      "departmentCode": "DEMO-K",
+      "departmentName": "Khoa KSNK (mô phỏng)",
+      "memberType": "KSNK",
+      "networkTitle": "Thư ký mạng lưới",
+      "active": true
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "title": "Giám sát phòng ngừa chuẩn và phòng ngừa cách ly",
+      "area": "Phòng ngừa chuẩn/cách ly",
+      "assigneeRole": "MEMBER_DOCTOR",
+      "description": "Phối hợp giám sát trong quá trình khám, chẩn đoán, điều trị và thực hiện thủ thuật.",
+      "frequency": "Theo kế hoạch và phân công của đơn vị",
+      "departmentCode": "DEMO-A",
+      "status": "Đang thực hiện",
+      "departmentName": "Khoa A (mô phỏng)"
+    },
+    {
+      "id": "t2",
+      "title": "Theo dõi nguy cơ nhiễm khuẩn liên quan thiết bị xâm lấn",
+      "area": "Thiết bị xâm lấn",
+      "assigneeRole": "MEMBER_DOCTOR",
+      "description": "Phối hợp giám sát chỉ định, thực hiện và theo dõi biện pháp phòng ngừa liên quan catheter, sonde tiểu, ống nội khí quản.",
+      "frequency": "Theo kế hoạch và đặc điểm chuyên môn khoa",
+      "departmentCode": "DEMO-A",
+      "status": "Đang thực hiện",
+      "departmentName": "Khoa A (mô phỏng)"
+    },
+    {
+      "id": "t3",
+      "title": "Giám sát vệ sinh tay và phương tiện phòng hộ cá nhân",
+      "area": "Vệ sinh tay/PPE",
+      "assigneeRole": "MEMBER_NURSE",
+      "description": "Theo dõi tuân thủ vệ sinh tay, phòng ngừa chuẩn/cách ly và sử dụng phương tiện phòng hộ.",
+      "frequency": "Theo kế hoạch và phân công của đơn vị",
+      "departmentCode": "DEMO-A",
+      "status": "Đang thực hiện",
+      "departmentName": "Khoa A (mô phỏng)"
+    },
+    {
+      "id": "t4",
+      "title": "Giám sát dụng cụ, vệ sinh môi trường và chất thải",
+      "area": "Dụng cụ/môi trường/chất thải",
+      "assigneeRole": "MEMBER_NURSE",
+      "description": "Theo dõi làm sạch, khử khuẩn bề mặt, dụng cụ sau sử dụng và phân loại chất thải y tế.",
+      "frequency": "Theo kế hoạch và đặc điểm chuyên môn khoa",
+      "departmentCode": "DEMO-A",
+      "status": "Đang thực hiện",
+      "departmentName": "Khoa A (mô phỏng)"
+    },
+    {
+      "id": "t5",
+      "title": "Tổng hợp kết quả giám sát và báo cáo tháng",
+      "area": "Báo cáo",
+      "assigneeRole": "MEMBER_DOCTOR",
+      "description": "Tổng hợp hoạt động, kết quả giám sát, tồn tại/nguy cơ, khắc phục, sự cố và kiến nghị.",
+      "frequency": "Hằng tháng",
+      "departmentCode": "DEMO-A",
+      "status": "Đang thực hiện",
+      "departmentName": "Khoa A (mô phỏng)"
+    }
+  ],
+  "monitorings": [
+    {
+      "id": "g1",
+      "code": "GS-2026-001",
+      "date": "2026-11-16",
+      "departmentCode": "DEMO-A",
+      "departmentName": "Khoa A (mô phỏng)",
+      "area": "Vệ sinh tay",
+      "observer": "ĐD. Trần Thu Hà",
+      "method": "Quan sát trực tiếp",
+      "sampleSize": 12,
+      "compliant": 10,
+      "findings": "02 cơ hội vệ sinh tay chưa thực hiện đúng thời điểm.",
+      "evidence": "Ghi nhận tại khu điều trị (dữ liệu mô phỏng).",
+      "status": "Đã ghi nhận"
+    },
+    {
+      "id": "g2",
+      "code": "GS-2026-002",
+      "date": "2026-11-17",
+      "departmentCode": "DEMO-A",
+      "departmentName": "Khoa A (mô phỏng)",
+      "area": "Phòng ngừa chuẩn",
+      "observer": "BS. Nguyễn Minh An",
+      "method": "Quan sát và phỏng vấn",
+      "sampleSize": 8,
+      "compliant": 7,
+      "findings": "01 trường hợp sử dụng phương tiện phòng hộ chưa đầy đủ.",
+      "evidence": "Phiếu quan sát demo số 002.",
+      "status": "Đã ghi nhận"
+    }
+  ],
+  "risks": [
+    {
+      "id": "r1",
+      "code": "NC-2026-001",
+      "createdAt": "2026-11-16T08:45:00.000Z",
+      "departmentCode": "DEMO-A",
+      "departmentName": "Khoa A (mô phỏng)",
+      "title": "Chưa tuân thủ đầy đủ phương tiện phòng hộ cá nhân",
+      "category": "Phương tiện phòng hộ cá nhân",
+      "severity": "Trung bình",
+      "description": "Ghi nhận tình huống mô phỏng: nhân viên chưa sử dụng đầy đủ phương tiện phòng hộ theo tình huống chăm sóc.",
+      "immediateAction": "Đã nhắc nhở tại chỗ và báo điều dưỡng trưởng.",
+      "reporter": "ĐD. Trần Thu Hà",
+      "status": "Đang khắc phục",
+      "assignedTo": "Trưởng khoa Nội tổng hợp",
+      "dueDate": "2026-11-20",
+      "correction": "Tổ chức nhắc lại quy định và kiểm tra việc tuân thủ tại ca tiếp theo.",
+      "verification": "",
+      "verifiedBy": "",
+      "timeline": [
+        {
+          "at": "2026-11-16T08:45:00.000Z",
+          "by": "ĐD. Trần Thu Hà",
+          "action": "Tạo báo cáo nguy cơ"
+        },
+        {
+          "at": "2026-11-16T09:00:00.000Z",
+          "by": "BS. Lê Quốc Bình",
+          "action": "Tiếp nhận và giao khắc phục"
+        }
+      ]
+    },
+    {
+      "id": "r2",
+      "code": "NC-2026-002",
+      "createdAt": "2026-11-17T03:10:00.000Z",
+      "departmentCode": "DEMO-A",
+      "departmentName": "Khoa A (mô phỏng)",
+      "title": "Nguy cơ liên quan xử lý vật sắc nhọn",
+      "category": "Phơi nhiễm/vật sắc nhọn",
+      "severity": "Cao",
+      "description": "Tình huống mô phỏng phục vụ kiểm thử luồng cảnh báo; không phải sự cố người bệnh thật.",
+      "immediateAction": "Đã báo ngay lãnh đạo khoa và Khoa KSNK-PCBT để phối hợp xử lý theo quy trình chuyên môn.",
+      "reporter": "ĐD. Trần Thu Hà",
+      "status": "Chờ kiểm tra lại",
+      "assignedTo": "Khoa KSNK-PCBT",
+      "dueDate": "2026-11-18",
+      "correction": "Đã rà soát vị trí hộp đựng vật sắc nhọn và nhắc lại quy trình thu gom.",
+      "verification": "Chờ KSNK kiểm tra lại thực tế.",
+      "verifiedBy": "",
+      "timeline": [
+        {
+          "at": "2026-11-17T03:10:00.000Z",
+          "by": "ĐD. Trần Thu Hà",
+          "action": "Báo cáo nguy cơ cao – yêu cầu báo ngay"
+        },
+        {
+          "at": "2026-11-17T03:20:00.000Z",
+          "by": "Khoa KSNK-PCBT",
+          "action": "Tiếp nhận thông tin"
+        }
+      ]
+    }
+  ],
+  "monthlyReports": [
+    {
+      "id": "b1",
+      "month": "2026-11",
+      "departmentCode": "DEMO-A",
+      "departmentName": "Khoa A (mô phỏng)",
+      "activities": "Giám sát vệ sinh tay, phòng ngừa chuẩn và phương tiện phòng hộ cá nhân.",
+      "monitoringCount": 2,
+      "risksFound": 2,
+      "risksClosed": 0,
+      "incidents": "01 nguy cơ cao đang chờ kiểm tra lại; 01 tồn tại đang khắc phục.",
+      "recommendations": "Tiếp tục nhắc nhở thực hành và phối hợp KSNK kiểm tra lại.",
+      "submittedBy": "ĐD. Trần Thu Hà",
+      "status": "Đã gửi",
+      "createdAt": "2026-11-17T10:00:00.000Z"
+    }
+  ],
+  "audit": []
+}

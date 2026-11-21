@@ -1,0 +1,13 @@
+{
+  "name": "ksnk-network-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Demo he thong quan ly Mang luoi Kiem soat nhiem khuan",
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "dev": "concurrently \"npm --prefix server run dev\" \"npm --prefix client start\"",
+    "build": "npm --prefix client run build",
+    "start": "npm --prefix server start"
+  },
+  "devDependencies": {"concurrently": "^9.1.2"}
+}
