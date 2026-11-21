@@ -91,7 +91,7 @@ interface SuspectedCase {
     table { min-width:940px; width:100%; }
   `],
   template: `
-    <div class="warning"><b>Bắt đầu từ “Giám sát trong ngày”.</b>
+    <div class="warning"><b>{{isKsnk ? 'Theo dõi kết quả giám sát của các khoa.' : 'Bắt đầu từ “Giám sát trong ngày”.'}}</b>
       Chỉ dùng số liệu mô phỏng; không nhập thông tin nhận dạng người bệnh. Ca nghi ngờ phải báo trực tiếp, phần mềm không chẩn đoán.</div>
     <div class="tabs">
       <button *ngFor="let tab of tabs" type="button" [class.active]="view===tab.key" (click)="selectTab(tab.key)">{{tab.label}}</button>
@@ -101,7 +101,7 @@ interface SuspectedCase {
 
     <section *ngIf="view==='daily'">
       <div class="panel">
-        <div class="panel-heading"><div><h3>1. Giám sát trong ngày</h3><p>Bác sĩ nhập số liệu; điều dưỡng ghi phiếu vệ sinh tay tại “Phiếu giám sát”.</p></div></div>
+        <div class="panel-heading"><div><h3>{{isKsnk ? '1. Theo dõi các khoa' : '1. Giám sát trong ngày'}}</h3><p>Bác sĩ nhập số liệu; điều dưỡng ghi phiếu vệ sinh tay tại “Phiếu giám sát”.</p></div></div>
         <div class="fields"><div><label>Ngày theo dõi</label><input type="date" [(ngModel)]="date" (ngModelChange)="loadDay()" [ngModelOptions]="{standalone:true}"></div></div>
         <div class="actions" *ngIf="canReportCase"><button type="button" class="outline-button" (click)="selectTab('cases')">Ghi nhận ca nghi ngờ</button></div>
         <div class="alert" *ngIf="day?.overdue && day?.alerts?.length">Cảnh báo quá hạn: {{day?.alerts?.length}} mục chưa nhập theo mốc demo 16:00.</div>

@@ -4,7 +4,7 @@
 
 ## Demo trực tuyến
 
-Mở [KSNK Network trên GitHub Pages](https://dukapai.github.io/ksns/). Chọn phân hệ và tài khoản demo ở mục 2.
+Mở [KSNK Network trên GitHub Pages](https://dukapai.github.io/ksns/). Chọn **Bác sĩ mạng lưới** để ghi nhận tại khoa hoặc **Khoa KSNK-PCBT** để theo dõi toàn mạng lưới; mỗi nút tự đăng nhập bằng tài khoản demo tương ứng. Các tài khoản điều dưỡng, trưởng khoa và thư ký vẫn có trong **Tài khoản khác / đăng nhập thủ công**.
 
 Bản web chạy hoàn toàn trong trình duyệt, không kết nối máy chủ hay dữ liệu bệnh viện. Dữ liệu mỗi trình duyệt lưu riêng, không đồng bộ giữa người dùng hoặc thiết bị; xóa dữ liệu trang web hoặc dùng chế độ riêng tư có thể làm mất dữ liệu. Để bắt đầu lại, xóa dữ liệu trang web `dukapai.github.io` trong cài đặt trình duyệt (việc này cũng có thể xóa dữ liệu các trang khác cùng tên miền). Không nhập dữ liệu người bệnh hoặc tài khoản thật. Vai trò và đăng nhập chỉ mô phỏng trong trình duyệt, không cung cấp bảo mật cho triển khai thực tế.
 
@@ -41,7 +41,7 @@ Mật khẩu demo chung: `Demo@123`
 
 Dữ liệu nhân sự và khoa/phòng trong bản công khai đều là giả lập, không đại diện cho nhân viên hoặc danh mục bệnh viện thật.
 
-**Bắt đầu:** chọn một tài khoản dùng thử, sau đó trên trang chính chọn **Giám sát trong ngày**, **Báo điều bất thường** hoặc **Tổng hợp cuối tháng**. Phần mềm không tự gửi cảnh báo; tình huống khẩn cấp phải báo trực tiếp.
+**Bắt đầu:** chọn một trong hai vai trò chính ở trang đầu. Bác sĩ có ba việc: **Giám sát trong ngày**, **Báo nguy cơ**, **Gửi báo cáo tháng**; KSNK có **Theo dõi các khoa**, **Kiểm tra nguy cơ**, **Theo dõi bác sĩ**. Chức năng bổ sung nằm ở **Xem chức năng khác**. Phần mềm không tự gửi cảnh báo; tình huống khẩn cấp phải báo trực tiếp.
 
 ## 3. Các luồng nghiệp vụ đã có
 
@@ -55,7 +55,7 @@ Dữ liệu nhân sự và khoa/phòng trong bản công khai đều là giả l
 - BM-BS01 phân biệt đạt, chưa đạt, không áp dụng và không đánh giá được; hai loại cuối không tính vào mẫu số. Báo cáo bác sĩ là bản chụp số liệu tại thời điểm gửi, không phải tỷ lệ nhiễm khuẩn bệnh viện hay chẩn đoán.
 - Số nguy cơ trong báo cáo bác sĩ được tính theo tháng tạo phiếu tại múi giờ Việt Nam; trạng thái mở/đóng là trạng thái khi tổng hợp, không phải số vấn đề được đóng trong tháng.
 - Nguy cơ cao phải báo **ngay bằng kênh trực tiếp** cho lãnh đạo khoa, KSNK-PCBT và cấp có thẩm quyền; việc nhập phiếu không gửi thông báo, không thay thế xử trí chuyên môn.
-- Trang chủ chọn một trong ba phân hệ: Thành viên mạng lưới, Trưởng khoa, Khoa KSNK-PCBT.
+- Trang chủ ưu tiên hai vai trò bác sĩ và KSNK; các phân hệ khác vẫn có ở mục tài khoản nâng cao.
 - Đăng nhập; chế độ Node kiểm tra vai trò tại backend, còn bản Pages chỉ mô phỏng kiểm tra tại trình duyệt. Chọn phân hệ không tự cấp quyền.
 - Thành viên: xem nhiệm vụ, tạo phiếu giám sát, báo cáo nguy cơ/sự cố, xem tình trạng khắc phục, lập báo cáo tháng.
 - Trưởng khoa: xem hoạt động của khoa, tiếp nhận nguy cơ, giao/ghi nhận khắc phục và gửi xác nhận hoàn thành.
