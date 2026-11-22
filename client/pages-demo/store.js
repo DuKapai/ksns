@@ -1,5 +1,6 @@
 import seed from "../../server/data/seed.json";
-const key = "ksnk_pages_store_v1";
+// Keep the old demo intact; its accounts and department codes differ from this module.
+const key = "ksnk_pages_store_v2";
 let queue = Promise.resolve();
 
 export async function readStore() {

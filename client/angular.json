@@ -23,7 +23,7 @@
           "configurations": {
             "production": {"budgets":[{"type":"initial","maximumWarning":"1.5MB","maximumError":"3MB"}],"outputHashing":"all"},
             "development": {"optimization":false,"extractLicenses":false,"sourceMap":true},
-            "pages": {"browser":"src/main-pages.ts","index":{"input":"src/index-pages.html","output":"index.html"},"tsConfig":"tsconfig.pages.json"}
+            "pages": {"browser":"src/main-pages.ts","index":{"input":"src/index-pages.html","output":"index.html"},"tsConfig":"tsconfig.pages.json","outputPath":"dist/ksnk-pages"}
           },
           "defaultConfiguration": "production"
         },

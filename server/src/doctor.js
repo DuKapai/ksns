@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { readStore, updateStore, makeId } from "./store.js";
 import { validDate, validDateTime, validMonth } from "./validation.js";
+import { requireRecorder } from "./module.js";
 
 const defaults = { dailyMinutes: 15, weeklyMinutes: 30, monthlyWeeklyTarget: 4, reportDay: 5 };
 const periods = ["Hằng ngày", "Hằng tuần", "Đột xuất"];
@@ -98,7 +99,7 @@ export function doctorRouter({ currentUser, hasRole, sameDepartmentOrAdmin, audi
     res.json({ items: (data.doctorObservations || []).filter((item) => visible(req, item))
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))) });
   }));
-  router.post("/observations", doctorOnly, identity, asyncRoute(async (req, res) => {
+  router.post("/observations", doctorOnly, requireRecorder, identity, asyncRoute(async (req, res) => {
     const b = req.body || {};
     if (!validDate(b.date) || !periods.includes(b.period) || !filled(b.topic) ||
         !filled(b.method) || !filled(b.location) || !Number.isSafeInteger(b.sampleSize) || b.sampleSize < 0 ||
@@ -138,7 +139,7 @@ export function doctorRouter({ currentUser, hasRole, sameDepartmentOrAdmin, audi
     res.json({ items: (data.doctorReports || []).filter((item) => visible(req, item))
       .sort((a, b) => String(b.month || "").localeCompare(String(a.month || ""))) });
   }));
-  router.post("/reports", doctorOnly, identity, asyncRoute(async (req, res) => {
+  router.post("/reports", doctorOnly, requireRecorder, identity, asyncRoute(async (req, res) => {
     const b = req.body || {};
     if (!validMonth(b.month) || !["activities", "incidents", "recommendations"].every((key) => text(b[key]))) {
       return res.status(400).json({ message: "Tháng hoặc nội dung báo cáo không hợp lệ." });

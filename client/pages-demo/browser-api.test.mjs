@@ -60,3 +60,47 @@ test("browser API persists demo workflows and enforces demo roles", async () => 
   localStorage.setItem = setItem;
   assert.equal((await request("PUT", "/surveillance/daily", daily, doctor)).status, 200);
 });
+
+test("Pages opens the simple module without login and persists the three-role workflow", async () => {
+  const tokens = {};
+  for (const persona of ["doctor", "staff", "ksnk"]) {
+    const session = await request("POST", "/auth/demo-session", { persona });
+    assert.equal(session.status, 200);
+    assert.equal(session.body.demo, true);
+    tokens[persona] = session.body.token;
+  }
+  const { doctor, staff, ksnk } = tokens;
+  const context = await request("GET", "/module/context", null, doctor);
+  assert.equal(context.status, 200);
+  assert.equal(context.body.canRecord, true);
+  assert.ok(context.body.people.some(person => person.employeeCode === "DEMO-NV-001"));
+  assert.equal((await request("GET", "/module/context", null, staff)).body.canRecord, false);
+  const today = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const month = today.slice(0, 7);
+  const monitoring = { date: today, area: "Hand hygiene", sampleSize: 10, compliant: 8, findings: "Demo finding" };
+  assert.equal((await request("POST", "/monitorings", monitoring, doctor)).status, 201);
+  const form = { category: "Hand hygiene", severity: "Cao", description: "Pages demo issue", subjectEmployeeCode: "DEMO-NV-001" };
+  assert.equal((await request("POST", "/risks", form, staff)).status, 403);
+  const created = await request("POST", "/risks", form, doctor);
+  assert.equal(created.status, 201);
+  const id = created.body.item.id;
+  const overview = await request("GET", `/module/overview?from=${month}-01&to=${today}`, null, staff);
+  assert.ok(overview.body.notices.some(notice => notice.riskId === id));
+  assert.equal((await request("POST", `/module/issues/${id}/responses`,
+    { explanation: "Demo response", evidence: "Demo reference" }, staff)).status, 201);
+  assert.equal((await request("PATCH", `/risks/${id}`, { action: "accept" }, ksnk)).status, 200);
+  assert.equal((await request("PATCH", `/risks/${id}`, { action: "correct", correction: "Demo correction" }, doctor)).status, 200);
+  assert.equal((await request("PATCH", `/risks/${id}`, { action: "verify", passed: true, verification: "Passed" }, ksnk)).status, 200);
+  const summary = await request("GET", `/module/report-summary?month=${month}`, null, doctor);
+  assert.equal(summary.status, 200);
+  const report = await request("POST", "/reports", { month }, doctor);
+  assert.equal(report.status, 201);
+  for (const metric of ["monitoringCount", "risksFound", "risksClosed"]) {
+    assert.equal(report.body.item[metric], summary.body.summary[metric]);
+  }
+  const reloaded = await import("../src/demo-api.generated.mjs?simple-module-reload");
+  const issues = await reloaded.dispatch("GET", "/api/module/issues", null, { authorization: `Bearer ${staff}` });
+  const saved = issues.body.items.find(issue => issue.id === id);
+  assert.equal(saved.status, "Đã đóng");
+  assert.equal(saved.responses.length, 1);
+});

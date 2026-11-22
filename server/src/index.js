@@ -7,7 +7,8 @@ import { readStore, updateStore, makeId } from "./store.js";
 import { doctorRouter } from "./doctor.js";
 import { surveillanceRouter } from "./surveillance.js";
 import { readDepartments } from "./departments.js";
-import { validDate, validDateTime } from "./validation.js";
+import { validDate, validDateTime, validMonth } from "./validation.js";
+import { moduleRouter, requireRecorder, requireNetworkReader, visibleRisk, monthlySummary, vietnamDate } from "./module.js";
 import {
   authenticateToken,
   constantTimeEqual,
@@ -18,6 +19,7 @@ import {
 const app = express();
 const port = Number(process.env.PORT || 3000);
 const allowedOrigin = process.env.CLIENT_ORIGIN || "http://localhost:4200";
+const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(cors({ origin: allowedOrigin, credentials: false }));
@@ -175,6 +177,20 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
+app.post("/api/auth/demo-session", asyncRoute(async (req, res) => {
+  if (process.env.DEMO_AUTO_LOGIN !== "true" || process.env.NODE_ENV === "production") {
+    return res.status(403).json({ message: "Chưa có phiên MyHV. Bản dùng thử cần bật DEMO_AUTO_LOGIN=true ở máy chủ." });
+  }
+  const accounts = { doctor: "DEMO-BS-001", staff: "DEMO-NV-001", ksnk: "DEMO-KSNK-001" };
+  const persona = req.body?.persona || "doctor";
+  if (!Object.hasOwn(accounts, persona)) return res.status(400).json({ message: "Tài khoản mẫu không hợp lệ." });
+  const data = await readStore();
+  const user = data.users.find((item) => item.active && item.employeeCode === accounts[persona] &&
+    (persona !== "ksnk" || item.roles.includes("KSNK_ADMIN")));
+  if (!user) return res.status(404).json({ message: "Không có tài khoản mẫu trong dữ liệu hiện tại." });
+  res.json({ token: issueToken(user), user: safeUser(user), demo: true });
+}));
+
 // =====================================================
 // 5. THÔNG TIN TÀI KHOẢN ĐANG ĐĂNG NHẬP
 // =====================================================
@@ -195,7 +211,7 @@ app.get("/api/departments", currentUser, async (_req, res, next) => {
 // 6. DASHBOARD
 // =====================================================
 
-app.get("/api/dashboard", currentUser, async (req, res) => {
+app.get("/api/dashboard", currentUser, requireNetworkReader, async (req, res) => {
   const data = await readStore();
 
   const admin = canSeeAll(req.user);
@@ -244,7 +260,7 @@ app.get("/api/dashboard", currentUser, async (req, res) => {
 // 7. NHIỆM VỤ
 // =====================================================
 
-app.get("/api/tasks", currentUser, async (req, res) => {
+app.get("/api/tasks", currentUser, requireNetworkReader, async (req, res) => {
   const data = await readStore();
   const roles = req.user.roles;
 
@@ -265,7 +281,7 @@ app.get("/api/tasks", currentUser, async (req, res) => {
 // 8. PHIẾU GIÁM SÁT
 // =====================================================
 
-app.get("/api/monitorings", currentUser, async (req, res) => {
+app.get("/api/monitorings", currentUser, requireNetworkReader, async (req, res) => {
   const data = await readStore();
 
   const items = data.monitorings
@@ -280,14 +296,20 @@ app.get("/api/monitorings", currentUser, async (req, res) => {
 app.post(
   "/api/monitorings",
   currentUser,
-  hasRole("MEMBER_DOCTOR", "MEMBER_NURSE", "KSNK_ADMIN"),
+  requireRecorder,
   async (req, res) => {
     const body = req.body || {};
 
-    if (!body.area || !body.method || !body.findings) {
+    if (!body.area) {
       return res.status(400).json({
-        message: "Vui lòng nhập lĩnh vực, phương pháp và kết quả giám sát.",
+        message: "Chọn nội dung giám sát.",
       });
+    }
+    if (body.date !== undefined && !validDate(body.date)) {
+      return res.status(400).json({ message: "Ngày giám sát không hợp lệ." });
+    }
+    if (["method", "findings", "evidence"].some((key) => body[key] !== undefined && typeof body[key] !== "string")) {
+      return res.status(400).json({ message: "Ghi chú giám sát không hợp lệ." });
     }
 
     const optionalFields = [
@@ -313,6 +335,9 @@ app.post(
         message: "Cỡ mẫu và số đạt phải là số nguyên không âm; số đạt không được vượt cỡ mẫu.",
       });
     }
+    if (compliant < sampleSize && !body.findings?.trim()) {
+      return res.status(400).json({ message: "Ghi điểm chưa đạt khi có lượt làm chưa đúng." });
+    }
 
     const item = await updateStore((data) => {
       const record = {
@@ -322,7 +347,8 @@ app.post(
           data.monitorings.length + 1,
         ).padStart(3, "0")}`,
 
-        date: body.date || new Date().toISOString().slice(0, 10),
+        date: body.date || vietnamDate(),
+        createdAt: new Date().toISOString(),
 
         departmentCode: req.user.departmentCode,
         departmentName: req.user.departmentName,
@@ -332,12 +358,12 @@ app.post(
         observerEmployeeCode: req.user.employeeCode || "",
         observerRole: req.user.roles?.includes("MEMBER_NURSE") ? "MEMBER_NURSE" :
           req.user.roles?.includes("MEMBER_DOCTOR") ? "MEMBER_DOCTOR" : "KSNK",
-        method: body.method,
+        method: body.method || "Quan sát trực tiếp",
 
         sampleSize,
         compliant,
 
-        findings: body.findings,
+        findings: body.findings?.trim() || "Tất cả lượt kiểm tra đều đạt",
         evidence: body.evidence || "",
         ...Object.fromEntries(optionalFields.filter((key) => body[key] !== undefined).map((key) => [key, body[key]])),
 
@@ -349,7 +375,7 @@ app.post(
       audit(
         data,
         req.user,
-        "Tạo phiếu giám sát",
+        "Ghi nhận giám sát",
         "monitoring",
         record.id,
       );
@@ -370,7 +396,7 @@ app.get("/api/risks", currentUser, async (req, res) => {
 
   const items = data.risks
     .filter((x) =>
-      sameDepartmentOrAdmin(req, x.departmentCode),
+      visibleRisk(req.user, x),
     )
     .sort((a, b) =>
       b.createdAt.localeCompare(a.createdAt),
@@ -382,36 +408,46 @@ app.get("/api/risks", currentUser, async (req, res) => {
 app.post(
   "/api/risks",
   currentUser,
-  hasRole("MEMBER_DOCTOR", "MEMBER_NURSE", "KSNK_ADMIN"),
+  requireRecorder,
   async (req, res) => {
     const body = req.body || {};
+    const description = typeof body.description === "string" ? body.description.trim() : "";
+    const firstLine = description.split(/\r?\n/)[0];
+    const title = typeof body.title === "string" && body.title.trim() ? body.title.trim() :
+      firstLine.length > 80 ? `${firstLine.slice(0, 79)}…` : firstLine;
 
     if (
-      !body.title ||
-      !body.category ||
-      !body.severity ||
-      !body.description
+      !description || (body.title !== undefined && typeof body.title !== "string") ||
+      typeof body.category !== "string" || !body.category.trim() ||
+      !["Thấp", "Trung bình", "Cao"].includes(body.severity)
     ) {
       return res.status(400).json({
-        message: "Vui lòng nhập tên nguy cơ, lĩnh vực, mức độ và mô tả.",
+        message: "Chọn nội dung, mức độ và mô tả vấn đề.",
       });
     }
 
     const optionalFields = [
       "discoveredAt", "location", "source", "notificationTarget",
-      "notificationAt", "notificationMethod",
+      "notificationAt", "notificationMethod", "subjectEmployeeCode", "dueDate", "kind",
     ];
     if (
       optionalFields.some((key) => body[key] !== undefined && typeof body[key] !== "string") ||
-      ["discoveredAt", "notificationAt"].some((key) => body[key] && !validDateTime(body[key]))
+      ["discoveredAt", "notificationAt"].some((key) => body[key] && !validDateTime(body[key])) ||
+      (body.dueDate && !validDate(body.dueDate))
     ) {
       return res.status(400).json({
         message: "Thông tin bổ sung phải là chuỗi; thời gian phải hợp lệ.",
       });
     }
+    if (body.kind !== undefined && !["Nguy cơ", "Tồn tại", "Sai sót", "Sự cố"].includes(body.kind)) {
+      return res.status(400).json({ message: "Loại vấn đề không hợp lệ." });
+    }
 
     const item = await updateStore((data) => {
       const now = new Date().toISOString();
+      const subject = body.subjectEmployeeCode ? data.users.find((user) => user.active &&
+        user.employeeCode === body.subjectEmployeeCode && sameDepartmentOrAdmin(req, user.departmentCode)) : null;
+      if (body.subjectEmployeeCode && !subject) return null;
 
       const record = {
         id: makeId("risk"),
@@ -425,15 +461,16 @@ app.post(
         departmentCode: req.user.departmentCode,
         departmentName: req.user.departmentName,
 
-        title: body.title,
+        title,
         category: body.category,
         severity: body.severity,
-        description: body.description,
+        description,
 
         immediateAction: body.immediateAction || "",
 
         reporter: req.user.fullName,
         employeeCode: req.user.employeeCode || "",
+        subjectName: subject?.fullName || "",
         ...Object.fromEntries(optionalFields.filter((key) => body[key] !== undefined).map((key) => [key, body[key]])),
         status: "Mới ghi nhận",
 
@@ -455,18 +492,23 @@ app.post(
 
             action:
               body.severity === "Cao"
-                ? "Báo cáo nguy cơ cao – cần thông báo ngay"
-                : "Tạo báo cáo nguy cơ",
+                ? "Ghi nhận vấn đề nguy hiểm – cần báo ngay"
+                : "Ghi nhận vấn đề",
           },
         ],
       };
 
       data.risks.unshift(record);
+      if (subject) (data.notifications ||= []).unshift({
+        id: makeId("notice"), recipient: subject.employeeCode, riskId: record.id,
+        text: `Bạn có phiếu cần xem: ${record.title}`,
+        urgent: record.severity === "Cao", at: now,
+      });
 
       audit(
         data,
         req.user,
-        "Tạo báo cáo nguy cơ",
+        "Ghi nhận vấn đề",
         "risk",
         record.id,
       );
@@ -474,6 +516,7 @@ app.post(
       return record;
     });
 
+    if (!item) return res.status(400).json({ message: "Người được ghi nhận không có trong danh sách nhân viên được phép chọn." });
     res.status(201).json({
       item,
       alertRequired: item.severity === "Cao",
@@ -485,7 +528,7 @@ app.post(
 // 10. CẬP NHẬT TIẾN ĐỘ XỬ LÝ NGUY CƠ
 // =====================================================
 
-app.patch("/api/risks/:id", currentUser, async (req, res) => {
+app.patch("/api/risks/:id", currentUser, requireNetworkReader, async (req, res) => {
   const body = req.body || {};
 
   const result = await updateStore((data) => {
@@ -528,7 +571,7 @@ app.patch("/api/risks/:id", currentUser, async (req, res) => {
       item.timeline.push({
         at: now,
         by: req.user.fullName,
-        action: "Tiếp nhận và phân công xử lý",
+        action: "Tiếp nhận xử lý",
       });
     } else if (body.action === "correct") {
       if (
@@ -557,6 +600,7 @@ app.patch("/api/risks/:id", currentUser, async (req, res) => {
       }
 
       item.correction = body.correction;
+      if (body.dueDate !== undefined) item.dueDate = body.dueDate;
       item.status = "Chờ kiểm tra lại";
 
       item.correctionHistory ||= [];
@@ -572,7 +616,7 @@ app.patch("/api/risks/:id", currentUser, async (req, res) => {
       item.timeline.push({
         at: now,
         by: req.user.fullName,
-        action: "Cập nhật biện pháp khắc phục – chờ kiểm tra lại",
+        action: "Báo đã xử lý – chờ xác nhận",
       });
     } else if (body.action === "verify") {
       if (
@@ -606,8 +650,8 @@ app.patch("/api/risks/:id", currentUser, async (req, res) => {
         by: req.user.fullName,
 
         action: body.passed
-          ? "Kiểm tra lại đạt – đóng vấn đề"
-          : "Kiểm tra lại chưa đạt – yêu cầu tiếp tục khắc phục",
+          ? "Xác nhận hoàn thành"
+          : "Chưa đạt – cần xử lý tiếp",
       });
     } else {
       return { error: "Thao tác không hợp lệ." };
@@ -616,7 +660,7 @@ app.patch("/api/risks/:id", currentUser, async (req, res) => {
     audit(
       data,
       req.user,
-      `Cập nhật nguy cơ: ${body.action}`,
+      { accept: "Tiếp nhận vấn đề", correct: "Báo đã xử lý vấn đề", verify: "Xác nhận kết quả xử lý" }[body.action],
       "risk",
       item.id,
     );
@@ -641,11 +685,14 @@ app.patch("/api/risks/:id", currentUser, async (req, res) => {
 // 11. BÁO CÁO HOẠT ĐỘNG
 // =====================================================
 
-app.get("/api/reports", currentUser, async (req, res) => {
+app.get("/api/reports", currentUser, requireNetworkReader, async (req, res) => {
   const data = await readStore();
 
   res.json({
-    items: data.monthlyReports
+    items: [...data.monthlyReports, ...(data.doctorReports || []).map((item) => ({
+      ...item, monitoringCount: item.summary.monitoringCount, risksFound: item.summary.riskCount,
+      risksClosed: item.summary.closedRiskCount, source: "doctor",
+    }))]
       .filter((x) =>
         sameDepartmentOrAdmin(req, x.departmentCode),
       )
@@ -656,13 +703,19 @@ app.get("/api/reports", currentUser, async (req, res) => {
 app.post(
   "/api/reports",
   currentUser,
-  hasRole("MEMBER_DOCTOR", "MEMBER_NURSE", "KSNK_ADMIN"),
+  requireRecorder,
   async (req, res) => {
     const body = req.body || {};
-
+    if (!validMonth(body.month) || body.month > vietnamDate().slice(0, 7) ||
+        ["activities", "incidents", "recommendations"].some((key) => body[key] !== undefined && typeof body[key] !== "string")) {
+      return res.status(400).json({ message: "Chọn tháng hiện tại hoặc trước đó và nhập ghi chú hợp lệ." });
+    }
     const item = await updateStore((data) => {
+      const summary = monthlySummary(data, req.user, body.month);
+      const existing = data.monthlyReports.find((report) => report.month === body.month &&
+        report.employeeCode === req.user.employeeCode && report.departmentCode === req.user.departmentCode);
       const record = {
-        id: makeId("report"),
+        id: existing?.id || makeId("report"),
 
         month:
           body.month ||
@@ -673,9 +726,11 @@ app.post(
 
         activities: body.activities || "",
 
-        monitoringCount: Number(body.monitoringCount || 0),
-        risksFound: Number(body.risksFound || 0),
-        risksClosed: Number(body.risksClosed || 0),
+        monitoringCount: summary.monitoringCount,
+        risksFound: summary.risksFound,
+        risksClosed: summary.risksClosed,
+        summary,
+        employeeCode: req.user.employeeCode,
 
         incidents: body.incidents || "",
         recommendations: body.recommendations || "",
@@ -686,12 +741,15 @@ app.post(
         createdAt: new Date().toISOString(),
       };
 
-      data.monthlyReports.unshift(record);
+      if (existing) {
+        const { versions, ...previous } = existing;
+        Object.assign(existing, record, { versions: [...(versions || []), previous] });
+      } else data.monthlyReports.unshift(record);
 
       audit(
         data,
         req.user,
-        "Gửi báo cáo tháng",
+        "Xác nhận báo cáo tháng",
         "monthlyReport",
         record.id,
       );
@@ -831,8 +889,9 @@ app.get(
 // 14. XỬ LÝ LỖI
 // =====================================================
 
-app.use("/api/doctor", doctorRouter({ currentUser, hasRole, sameDepartmentOrAdmin, audit }));
-app.use("/api/surveillance", surveillanceRouter({ currentUser, hasRole, audit }));
+app.use("/api/module", moduleRouter({ currentUser, audit }));
+app.use("/api/doctor", currentUser, requireNetworkReader, doctorRouter({ currentUser, hasRole, sameDepartmentOrAdmin, audit }));
+app.use("/api/surveillance", currentUser, requireNetworkReader, surveillanceRouter({ currentUser, hasRole, audit }));
 
 app.use((err, _req, res, _next) => {
   console.error("API error:", err.message);
@@ -846,7 +905,7 @@ app.use((err, _req, res, _next) => {
 // 15. KHỞI ĐỘNG SERVER
 // =====================================================
 
-app.listen(port, () => {
+app.listen(port, process.env.DEMO_AUTO_LOGIN === "true" ? "127.0.0.1" : undefined, () => {
   console.log("-----------------------------------------");
   console.log("KSNK NETWORK API");
   console.log(`Địa chỉ: http://localhost:${port}`);

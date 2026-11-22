@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { readStore, updateStore, makeId } from "./store.js";
 import { validDate, validDateTime, validMonth } from "./validation.js";
+import { requireRecorder } from "./module.js";
 
 const BUNDLES = ["VAP", "CAUTI", "SSI", "CLABSI"];
 const CASE_TYPES = ["Nghi ngờ NKBV", "Bệnh truyền nhiễm cần đánh giá", "Nguy cơ lây truyền khác"];
@@ -137,7 +138,7 @@ export function surveillanceRouter({ currentUser, hasRole, audit }) {
     res.json({ date: req.query.date, overdue, dueTime: "16:00 (mốc demo, cần cấu hình/phê duyệt)", departments, alerts });
   }));
 
-  router.put("/daily", departmentMember, hasRole("MEMBER_DOCTOR"), asyncRoute(async (req, res) => {
+  router.put("/daily", departmentMember, hasRole("MEMBER_DOCTOR"), requireRecorder, asyncRoute(async (req, res) => {
     const body = req.body || {};
     const validBundles = body.bundles && typeof body.bundles === "object" && !Array.isArray(body.bundles) &&
       BUNDLES.every((key) => {
@@ -196,7 +197,7 @@ export function surveillanceRouter({ currentUser, hasRole, audit }) {
     res.json({ items });
   }));
 
-  router.post("/cases", departmentMember, asyncRoute(async (req, res) => {
+  router.post("/cases", departmentMember, requireRecorder, asyncRoute(async (req, res) => {
     const body = req.body || {};
     if (!validDateTime(body.detectedAt) || !CASE_TYPES.includes(body.type) ||
         !filled(body.location) || !filled(body.findings) || !filled(body.initialAction) ||

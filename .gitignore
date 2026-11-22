@@ -2,11 +2,13 @@ node_modules/
 dist/
 .angular/
 .env
+.env.*
+!.env.example
 server/data/*.tmp
 server/data/demo-store.json
 server/test/store-*.json
 server/test/surveillance-*.json
-.env.*
-!.env.example
-.DS_Store
+server/test/module-*.json
+.tsupgrader/
 client/src/demo-api.generated.mjs
+.DS_Store

@@ -1,6 +1,18 @@
 {
   "users": [
     {
+      "id": "u-demo-staff",
+      "username": "nv.demo",
+      "password": "Demo@123",
+      "employeeCode": "DEMO-NV-001",
+      "fullName": "Nhân viên mẫu",
+      "position": "Nhân viên y tế",
+      "departmentCode": "DEMO-A",
+      "departmentName": "Khoa A (mô phỏng)",
+      "roles": ["STAFF"],
+      "active": true
+    },
+    {
       "id": "u1",
       "username": "bs.nguyen",
       "password": "Demo@123",

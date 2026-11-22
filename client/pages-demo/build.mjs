@@ -13,7 +13,10 @@ await build({
   entryPoints: [path.join(here, "entry.js")],
   outfile: path.resolve(here, "../src/demo-api.generated.mjs"),
   bundle: true, platform: "browser", format: "esm",
-  define: { "process.env.PORT": "undefined", "process.env.CLIENT_ORIGIN": "undefined" },
+  define: {
+    "process.env.PORT": "undefined", "process.env.CLIENT_ORIGIN": "undefined",
+    "process.env.DEMO_AUTO_LOGIN": '"true"', "process.env.NODE_ENV": '"demo"'
+  },
   plugins: [{
     name: "browser-adapters",
     setup(builder) {

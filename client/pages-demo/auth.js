@@ -1,5 +1,5 @@
 import { readStore } from "./store.js";
-const key = "ksnk_pages_sessions_v1";
+const key = "ksnk_pages_sessions_v2";
 export function safeUser(user) { const { password, ...safe } = user; return safe; }
 export function constantTimeEqual(left, right) { return String(left) === String(right); }
 export function issueToken(user) {

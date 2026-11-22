@@ -1,0 +1,477 @@
+<div class="app">
+  <header class="top">
+    <a routerLink="/app/dashboard" class="brand">
+      <img src="assets/Logo.png" alt="" />
+      <div><strong>KSNK</strong><small>Kiểm soát nhiễm khuẩn</small></div>
+    </a>
+    @if (user) {
+      <div class="top-right">
+        <button type="button" class="bell" (click)="showNotices = !showNotices" [attr.aria-expanded]="showNotices">
+          Thông báo @if (notices.length) { <b>{{ notices.length }}</b> }
+        </button>
+        <div class="who"><strong>{{ user.fullName }}</strong><small>{{ user.departmentName }}</small></div>
+      </div>
+    }
+  </header>
+
+  @if (showNotices) {
+    <div class="notice-panel">
+      @for (notice of notices; track notice.id) {
+        <button type="button" [class.red]="notice.urgent" (click)="openNotice(notice)">{{ notice.text }}</button>
+      } @empty { <p class="muted">Không có thông báo mới.</p> }
+    </div>
+  }
+
+  @if (context) {
+    <nav class="tabs-main" aria-label="Chức năng chính">
+      <a routerLink="/app/dashboard" [class.on]="section === 'dashboard'" [attr.aria-current]="section === 'dashboard' ? 'page' : null">Trang chủ</a>
+      <a routerLink="/app/risks" [class.on]="section === 'risks' || section === 'monitorings'" [attr.aria-current]="section === 'risks' || section === 'monitorings' ? 'page' : null">Phiếu</a>
+      @if (isReader) { <a routerLink="/app/reports" [class.on]="section === 'reports'" [attr.aria-current]="section === 'reports' ? 'page' : null">Báo cáo</a> }
+      @if (context.seesAll) { <a routerLink="/app/manage" [class.on]="section === 'manage'" [attr.aria-current]="section === 'manage' ? 'page' : null">Quản lý</a> }
+    </nav>
+  }
+
+  <main>
+    @if (success) { <p class="msg ok" role="status">{{ success }} <button type="button" (click)="success = ''" aria-label="Đóng">×</button></p> }
+    @if (error && !modal) { <div class="msg bad" role="alert">{{ error }} @if (context) { <button type="button" class="link" (click)="load()">Thử lại</button> }</div> }
+    @if (loading && !overview) { <p class="muted center">Đang tải…</p> }
+
+    @if (context && overview) {
+      <h1>{{ title }}</h1>
+      <!-- TRANG CHỦ -->
+      @if (section === 'dashboard') {
+        @if (canRecord) {
+          <div class="quick">
+            <button type="button" (click)="openMonitoring()"><strong>Ghi nhận giám sát</strong><small>Đếm số lần làm đúng khi quan sát</small></button>
+            <button type="button" (click)="openIssue()"><strong>Ghi nhận vấn đề</strong><small>Việc làm chưa đúng, nguy cơ, sự cố</small></button>
+          </div>
+        }
+
+        @if (isReader) {
+          <div class="cards">
+            <button type="button" class="card" (click)="go('monitorings')">
+              <small>Giám sát đến hạn</small><b>{{ overview.work.due || (overview.work.unscheduled ? '—' : 0) }}</b>
+              <span>{{ overview.work.unscheduled ? overview.work.unscheduled + ' nội dung chưa có lịch' : 'Theo lịch được giao' }}</span>
+            </button>
+            <button type="button" class="card" (click)="setFilter('new')">
+              <small>Vấn đề mới</small><b>{{ overview.work.new }}</b><span>Chờ tiếp nhận</span>
+            </button>
+            <button type="button" class="card" [class.alert]="overview.work.overdue" (click)="setFilter('tracking')">
+              <small>Đang theo dõi</small><b>{{ overview.work.processing + overview.work.waiting }}</b>
+              <span>{{ overview.work.waiting }} chờ xác nhận @if (overview.work.overdue) { · <em>{{ overview.work.overdue }} quá hạn</em> }</span>
+            </button>
+            <button type="button" class="card" [class.alert]="reportCardAlert" (click)="openReport(overview.work.reportMonth)">
+              <small>Báo cáo tháng {{ monthLabel(overview.work.reportMonth) }}</small>
+              @if (overview.work.ownReportRequired) {
+                <b>{{ overview.work.ownReportConfirmed ? 'Đã xong' : 'Chưa xong' }}</b>
+                <span>@if (reportCardAlert) { <em>Quá hạn, cần xác nhận</em> } @else if (overview.work.ownReportConfirmed) { Bạn đã xác nhận } @else { Cần bạn xác nhận }</span>
+              } @else {
+                <b>{{ overview.work.reportConfirmed }}/{{ overview.work.reportRequired }}</b>
+                <span>@if (reportCardAlert) { <em>{{ overview.work.reportMissing.length }} người quá hạn</em> } @else if (overview.work.reportMissing.length) { Người đã xác nhận } @else { Đã đủ }</span>
+              }
+            </button>
+          </div>
+        }
+
+        <section class="box">
+          <h2>Cần làm</h2>
+          @for (todo of visibleTodos; track todo.key) {
+            <div class="todo" [class.red]="todo.urgent">
+              <div><strong>{{ todo.text }}</strong>@if (todo.note) { <small>{{ todo.note }}</small> }</div>
+              <button type="button" class="btn small" (click)="todo.run()">{{ todo.button }}</button>
+            </div>
+          } @empty { <p class="muted">{{ isReader ? 'Không có việc đang chờ bạn xử lý.' : 'Chưa có phiếu cần bạn phản hồi.' }}</p> }
+          @if (todos.length > 5) {
+            <button type="button" class="link" (click)="showAllTodos = !showAllTodos">{{ showAllTodos ? 'Thu gọn' : 'Xem tất cả (' + todos.length + ')' }}</button>
+          }
+          @if (!isReader) { <p class="hint">Bạn được phản hồi phiếu liên quan đến mình đến hết tháng lập phiếu.</p> }
+        </section>
+
+        @if (isReader) {
+          <section class="box">
+            <div class="box-head"><h2>Số liệu</h2><button type="button" class="link" (click)="exportReport()">Tải về</button></div>
+            <ng-container *ngTemplateOutlet="periodPicker" />
+            <div class="tiles">
+              <div><b>{{ overview.summary.monitoringCount }}</b><small>Lượt giám sát</small></div>
+              <div><b>{{ overview.summary.risksFound }}</b><small>Vấn đề</small></div>
+              <div><b>{{ overview.summary.risksClosed }}</b><small>Đã xử lý xong</small></div>
+              <div><b>{{ rate(overview.summary.closureRate) }}</b><small>Tỷ lệ xử lý xong</small></div>
+            </div>
+            @if (stats.length) {
+              <div class="scroll">
+                <table>
+                  <thead><tr><th>Nội dung</th><th>Làm đúng<small>% số lần quan sát</small></th><th>Vấn đề<small>% trên tổng</small></th><th>Đã xử lý xong<small>% số vấn đề</small></th></tr></thead>
+                  <tbody>
+                    @for (row of stats; track row.name) {
+                      <tr>
+                        <td>{{ row.name }}</td>
+                        <td>@if (row.checked) { {{ row.met }}/{{ row.checked }} · <b>{{ rate(row.rate) }}</b> } @else { — }</td>
+                        <td>{{ row.issues }} @if (row.issues) { · {{ rate(row.share) }} }</td>
+                        <td>{{ row.closed }} @if (row.issues) { · {{ rate(row.closedRate) }} }</td>
+                      </tr>
+                    }
+                  </tbody>
+                  <tfoot><tr><td>Tổng</td><td>—</td><td>{{ overview.summary.risksFound }}</td><td>{{ overview.summary.risksClosed }} · {{ rate(overview.summary.closureRate) }}</td></tr></tfoot>
+                </table>
+              </div>
+            } @else { <p class="muted">Chưa có số liệu trong khoảng này.</p> }
+          </section>
+
+          <section class="box">
+            <h2>Hoạt động gần đây</h2>
+            @for (item of overview.activity.slice(0, 5); track $index) {
+              <div class="row">
+                <div><strong>{{ item.action }}</strong><small>{{ item.title }} · {{ item.by }} · {{ dateTime(item.at) }}</small></div>
+                @if (item.status) { <span class="badge">{{ statusLabel(item.status) }}</span> }
+              </div>
+            } @empty { <p class="muted">Chưa có hoạt động.</p> }
+          </section>
+        }
+      }
+
+      <!-- PHIẾU -->
+      @if (section === 'risks' || section === 'monitorings') {
+        @if (isReader) {
+          <div class="seg">
+            <a routerLink="/app/risks" [class.on]="section === 'risks'">Vấn đề</a>
+            <a routerLink="/app/monitorings" [class.on]="section === 'monitorings'">Giám sát</a>
+          </div>
+        }
+
+        @if (section === 'risks') {
+          @if (focusId) {
+            <button type="button" class="link" (click)="go('risks')">← Tất cả phiếu</button>
+          } @else {
+            @if (canRecord) { <button type="button" class="btn add" (click)="openIssue()">＋ Ghi nhận vấn đề</button> }
+            @if (isReader) {
+              <div class="chips">
+                @if (status === 'tracking') { <button type="button" class="on" (click)="setFilter('tracking')">Đang theo dõi {{ count('tracking') }}</button> }
+                @for (filter of filters; track filter.value) {
+                  <button type="button" [class.on]="status === filter.value" [class.red]="filter.value === 'overdue' && count('overdue')"
+                    (click)="setFilter(filter.value)">{{ filter.label }} {{ count(filter.value) }}</button>
+                }
+              </div>
+              <input class="search" type="search" [(ngModel)]="search" placeholder="Tìm theo nội dung, tên người, khoa" aria-label="Tìm phiếu" />
+            }
+          }
+
+          @for (issue of filteredIssues; track issue.id) {
+            <article class="issue" [class.red]="issue.severity === 'Cao' || overdue(issue)">
+              <div class="issue-head">
+                <strong>{{ issue.title }}</strong>
+                <span class="badge" [class.danger]="issue.severity === 'Cao'">{{ levelLabel(issue.severity) }}</span>
+                <span class="badge" [class.done]="issue.status === 'Đã đóng'">{{ statusLabel(issue.status) }}</span>
+              </div>
+              <small class="meta">{{ issue.category }} · {{ issue.departmentName }} · {{ date(issue.createdAt) }}
+                @if (issue.subjectName) { · Người liên quan: {{ issue.subjectName }} }</small>
+              @if (overdue(issue)) { <p class="red-text">Quá hạn xử lý (hạn {{ date(issue.dueDate) }})</p> }
+              <p class="hint">{{ waitingFor(issue) }}</p>
+              @if (issue.canRespond) { <p class="hint">Bạn được phản hồi đến hết tháng {{ monthLabel(issue.responseMonth) }}.</p> }
+              @else if (isSubject(issue)) { <p class="hint">Đã hết hạn phản hồi tháng {{ monthLabel(issue.responseMonth) }}. Bạn vẫn xem được nội dung và lịch sử bên dưới.</p> }
+              @if (nextStep(issue); as step) {
+                <button type="button" class="btn" [disabled]="saving" (click)="doStep(issue, step)">{{ stepLabel[step] }}</button>
+              } @else if (issue.canRespond) {
+                <button type="button" class="btn small ghost" (click)="doStep(issue, 'respond')">Gửi thêm phản hồi</button>
+              }
+              <details [open]="focusId === issue.id">
+                <summary>Chi tiết</summary>
+                <p>{{ issue.description }}</p>
+                @if (issue.immediateAction) { <p><b>Đã xử lý ngay:</b> {{ issue.immediateAction }}</p> }
+                @if (issue.correction) { <p><b>Khoa đã xử lý:</b> {{ issue.correction }}</p> }
+                @if (issue.verification) { <p><b>Kết quả kiểm tra:</b> {{ issue.verification }}</p> }
+                @for (reply of issue.responses || []; track reply.id) {
+                  <div class="reply"><b>Phản hồi của {{ reply.by }}</b> · {{ dateTime(reply.at) }}<p>{{ reply.explanation }}</p><small>Minh chứng: {{ reply.evidence }}</small></div>
+                }
+                @if (issue.timeline?.length) {
+                  <ul class="history">
+                    @for (step of issue.timeline; track $index) { <li>{{ dateTime(step.at) }} · {{ step.by }} · {{ step.action }}</li> }
+                  </ul>
+                }
+              </details>
+            </article>
+          } @empty { <p class="muted center">Không có phiếu nào.</p> }
+        }
+
+        @if (section === 'monitorings') {
+          @if (canRecord) { <button type="button" class="btn add" (click)="openMonitoring()">＋ Ghi nhận giám sát</button> }
+          @if (context.tasks.length) {
+            <details class="box"><summary>Nội dung được giao</summary>
+              @for (task of context.tasks; track task.id) {
+                <div class="row"><div><strong>{{ task.title }}</strong><small>{{ task.dueDate ? 'Hạn ' + date(task.dueDate) : 'Chưa có lịch cụ thể' }}</small></div>
+                  @if (canRecord) { <button type="button" class="btn small" (click)="openMonitoring(task.area)">Ghi nhận</button> }
+                </div>
+              }
+            </details>
+          }
+          <ng-container *ngTemplateOutlet="periodPicker" />
+          @for (item of filteredMonitorings; track item.id) {
+            <div class="row">
+              <div><strong>{{ item.area }}</strong><small>{{ date(item.date) }} · {{ item.observer }}@if (item.compliant < item.sampleSize) { · {{ item.findings }} }</small></div>
+              <span class="badge">{{ item.sampleSize ? item.compliant + '/' + item.sampleSize + ' đúng' : 'Không có lượt quan sát' }}</span>
+            </div>
+          } @empty { <p class="muted center">Chưa có lượt giám sát trong khoảng này.</p> }
+        }
+      }
+
+      <!-- BÁO CÁO -->
+      @if (section === 'reports') {
+        @if (canRecord && overview.work.ownReportRequired) {
+          <section class="box">
+            <h2>Báo cáo tháng của tôi</h2>
+            <label class="inline">Tháng báo cáo <input type="month" [(ngModel)]="reportMonth" [max]="today.slice(0,7)" (change)="loadReportSummary()" /></label>
+            @if (reportSummary) {
+              <div class="tiles three">
+                <div><b>{{ reportSummary.monitoringCount }}</b><small>Lượt giám sát</small></div>
+                <div><b>{{ reportSummary.risksFound }}</b><small>Vấn đề</small></div>
+                <div><b>{{ reportSummary.risksClosed }}</b><small>Đã xử lý xong</small></div>
+              </div>
+              <p class="hint">Số liệu tự lấy từ các phiếu bạn đã ghi. Chỉ cần kiểm tra và xác nhận.</p>
+              @if (myReport) { <p class="ok-text">✓ Đã xác nhận ngày {{ date(myReport.createdAt) }}</p> }
+              <details><summary>Thêm kiến nghị (không bắt buộc)</summary>
+                <textarea [(ngModel)]="recommendation" rows="3" maxlength="2000" aria-label="Kiến nghị"></textarea>
+              </details>
+              <button type="button" class="btn" [disabled]="saving" (click)="confirmReport()">{{ myReport ? 'Xác nhận lại' : 'Xác nhận báo cáo' }}</button>
+            } @else if (summaryLoading) { <p class="muted" role="status">Đang tính số liệu…</p> }
+          </section>
+        }
+
+        @if (canFollowReports) { <section class="box">
+          <h2>Tình hình nộp báo cáo tháng {{ monthLabel(overview.work.reportMonth) }}</h2>
+          <p><b>{{ overview.work.reportConfirmed }}/{{ overview.work.reportRequired }}</b> người đã xác nhận · Hạn {{ date(overview.work.reportDue) }}</p>
+          @if (overview.work.reportMissing.length) {
+            <p [class.red-text]="reportLate">{{ reportLate ? 'Quá hạn, chưa xác nhận:' : 'Chưa xác nhận:' }}</p>
+            <ul class="names" [class.red-text]="reportLate">
+              @for (person of overview.work.reportMissing; track $index) { <li>{{ person.fullName }} – {{ person.departmentName }}</li> }
+            </ul>
+          }
+        </section> }
+
+        <section class="box">
+          <div class="box-head"><h2>{{ canFollowReports ? 'Báo cáo đã xác nhận' : 'Báo cáo tôi đã xác nhận' }}</h2><button type="button" class="link" (click)="exportReport()">Tải bảng này</button></div>
+          <ng-container *ngTemplateOutlet="periodPicker" />
+          @if (filteredReports.length) {
+            <div class="scroll">
+              <table>
+                <thead><tr><th>Tháng</th><th>Người báo cáo</th><th>Giám sát</th><th>Vấn đề</th><th>Đã xử lý xong</th></tr></thead>
+                <tbody>
+                  @for (report of filteredReports; track report.id) {
+                    <tr><td>{{ monthLabel(report.month) }}</td><td>{{ report.submittedBy }}<small>{{ report.departmentName }}</small></td>
+                      <td>{{ report.monitoringCount }}</td><td>{{ report.risksFound }}</td><td>{{ report.risksClosed }}</td></tr>
+                  }
+                </tbody>
+                <tfoot><tr><td colspan="2">Tổng</td><td>{{ reportTotals.monitoringCount }}</td><td>{{ reportTotals.risksFound }}</td><td>{{ reportTotals.risksClosed }}</td></tr></tfoot>
+              </table>
+            </div>
+          } @else { <p class="muted">Chưa có báo cáo trong khoảng này.</p> }
+        </section>
+      }
+
+      <!-- QUẢN LÝ -->
+      @if (section === 'manage') {
+        <nav class="seg" aria-label="Quản lý">
+          <a routerLink="/app/manage" [queryParams]="{panel:'members'}" [class.on]="manageView === 'members'">Thành viên</a>
+          <a routerLink="/app/manage" [queryParams]="{panel:'settings'}" [class.on]="manageView === 'settings'">Hạn báo cáo</a>
+          @if (canReadLog) { <a routerLink="/app/manage" [queryParams]="{panel:'history'}" [class.on]="manageView === 'history'">Lịch sử</a> }
+        </nav>
+        @if (manageView === 'members') { <section class="box">
+          <div class="box-head">
+            <h2>Thành viên mạng lưới <small>{{ activeMembers }} đang tham gia</small></h2>
+            @if (canManage) { <button type="button" class="btn small" (click)="openMember()">＋ Thêm</button> }
+          </div>
+          <input class="search" type="search" [(ngModel)]="search" placeholder="Tìm tên, mã nhân viên, khoa" aria-label="Tìm thành viên" />
+          @for (member of filteredMembers; track member.id) {
+            <div class="row">
+              <div><strong>{{ member.fullName }}</strong><small>{{ member.memberType }} · {{ member.departmentName }} · {{ member.employeeCode }}</small></div>
+              <span class="badge" [class.done]="member.active">{{ member.active ? 'Đang tham gia' : 'Đã ngừng' }}</span>
+              @if (canManage && member.employeeCode !== user?.employeeCode) {
+                <button type="button" class="btn small ghost" [disabled]="saving" (click)="toggleMember(member)">{{ member.active ? 'Ngừng' : 'Mở lại' }}</button>
+              }
+            </div>
+          } @empty { <p class="muted">Không tìm thấy thành viên.</p> }
+        </section> }
+
+        @if (manageView === 'settings') { <section class="box">
+          <h2>Hạn báo cáo tháng</h2>
+          @if (canManage) {
+            <div class="inline">Ngày <input type="number" min="1" max="28" [(ngModel)]="reportDay" class="day" aria-label="Ngày hạn báo cáo hằng tháng" /> của tháng sau
+              <button type="button" class="btn small" [disabled]="saving" (click)="saveReportDay()">Lưu</button></div>
+          } @else { <p>Ngày {{ reportDay }} của tháng sau</p> }
+          <p class="hint">Ví dụ: báo cáo tháng 10 cần xác nhận trước khi hết ngày {{ reportDay }} tháng 11.</p>
+        </section> }
+
+        @if (manageView === 'history' && canReadLog) {
+          <section class="box">
+            <h2>Lịch sử thao tác</h2>
+            @for (log of logs; track log.id) {
+              <div class="row"><div><strong>{{ log.action }}</strong><small>{{ log.user }} · {{ dateTime(log.at) }}</small></div></div>
+            } @empty { <p class="muted">Chưa có thao tác.</p> }
+          </section>
+        }
+      }
+    }
+
+    @if (!context && !loading && error) {
+      <p class="center"><button type="button" class="btn" (click)="enterDemo(persona)">Thử lại</button></p>
+    }
+  </main>
+
+  @if (isDemo && context) {
+    <footer>
+      <span>Bản dùng thử · Không nhập thông tin người bệnh</span>
+      <details class="demo-options"><summary>Đổi người dùng thử</summary><label>Xem với vai trò
+        <select [ngModel]="persona" (ngModelChange)="switchPersona($event)">
+          <option value="doctor">Thành viên mạng lưới</option>
+          <option value="staff">Nhân viên y tế</option>
+          <option value="ksnk">Khoa KSNK</option>
+        </select>
+      </label></details>
+    </footer>
+  }
+</div>
+
+<ng-template #periodPicker>
+  <div class="chips">
+    @for (option of periods; track option.value) {
+      <button type="button" [class.on]="period === option.value" (click)="setPeriod(option.value)">{{ section === 'reports' && option.value === 'month' ? 'Tháng ' + monthLabel(reportMonth) : option.label }}</button>
+    }
+  </div>
+  @if (period === 'custom') {
+    <div class="inline">
+      <input type="date" [(ngModel)]="from" aria-label="Từ ngày" /> – <input type="date" [(ngModel)]="to" aria-label="Đến ngày" />
+      <button type="button" class="btn small" (click)="applyRange()">Xem</button>
+    </div>
+  }
+  <p class="hint">{{ section === 'reports' ? 'Tháng ' + monthLabel(reportFromMonth) + ' – ' + monthLabel(reportToMonth) : date(from) + ' – ' + date(to) }}</p>
+</ng-template>
+
+@if (modal) {
+    <dialog #formDialog class="dialog" [attr.aria-label]="modalTitle" (cancel)="cancelDialog($event)" (keydown.escape)="cancelDialog($event)">
+      <div class="dialog-head"><h2>{{ modalTitle }}</h2><button type="button" class="x" (click)="close()" [disabled]="saving" aria-label="Đóng">×</button></div>
+      @if (modal === 'issue' || modal === 'monitoring') { <p class="hint">{{ user?.fullName }} · {{ user?.departmentName }}</p> }
+
+      @if (modal === 'monitoring') {
+        <form #f="ngForm" (ngSubmit)="f.valid && saveMonitoring()">
+          <p class="hint">Ví dụ: quan sát 10 lần rửa tay, 8 lần làm đúng → nhập 10 và 8.</p>
+          <label>Nội dung giám sát
+            <select name="area" [(ngModel)]="monitoringForm.area" required>
+              <option value="" disabled>Chọn nội dung</option>
+              @for (area of monitoringAreas; track area) { <option [value]="area">{{ area }}</option> }
+            </select>
+          </label>
+          <div class="two">
+            <label>Số lần quan sát <input name="size" type="number" min="1" step="1" [(ngModel)]="monitoringForm.sampleSize" required /></label>
+            <label>Số lần làm đúng <input name="ok" type="number" min="0" step="1" [max]="monitoringForm.sampleSize ?? 0" [(ngModel)]="monitoringForm.compliant" required /></label>
+          </div>
+          @if (monitoringForm.compliant !== null && monitoringForm.sampleSize !== null && monitoringForm.compliant > monitoringForm.sampleSize) { <p class="red-text" role="alert">Số lần làm đúng không được lớn hơn số lần quan sát.</p> }
+          @if (monitoringRate !== null) { <p class="rate">Tỷ lệ làm đúng: {{ monitoringRate }}%</p> }
+          @if (needsFindings) {
+            <label>Chưa đúng ở điểm nào? <textarea name="findings" rows="2" [(ngModel)]="monitoringForm.findings" required
+              placeholder="Ví dụ: không rửa tay trước khi tiếp xúc người bệnh"></textarea></label>
+          }
+          <label>Ngày <input name="date" type="date" [max]="today" [(ngModel)]="monitoringForm.date" required /></label>
+          <ng-container *ngTemplateOutlet="actions; context: { valid: f.valid, label: 'Lưu giám sát' }" />
+        </form>
+      }
+
+      @if (modal === 'issue') {
+        <form #f="ngForm" (ngSubmit)="f.valid && saveIssue()">
+          <label>Nội dung
+            <select name="category" [(ngModel)]="issueForm.category" required>
+              <option value="" disabled>Chọn nội dung</option>
+              @for (area of areas; track area) { <option [value]="area">{{ area }}</option> }
+            </select>
+          </label>
+          <fieldset><legend>Mức độ</legend>
+            <div class="choices">
+              @for (level of levels; track level.value) {
+                <label class="choice" [class.on]="issueForm.severity === level.value" [class.danger]="level.value === 'Cao'">
+                  <input type="radio" name="severity" [value]="level.value" [(ngModel)]="issueForm.severity" required />
+                  <strong>{{ level.label }}</strong><small>{{ level.hint }}</small>
+                </label>
+              }
+            </div>
+          </fieldset>
+          @if (issueForm.severity === 'Cao') { <p class="msg bad">Nguy hiểm: gọi điện báo ngay lãnh đạo khoa và Khoa KSNK, sau đó lưu phiếu.</p> }
+          <label>Mô tả ngắn <textarea name="description" rows="3" maxlength="4000" [(ngModel)]="issueForm.description" required
+            placeholder="Việc gì, ở đâu, khi nào"></textarea></label>
+          @if (context?.people?.length) {
+            <label>Người liên quan (nếu có)
+              <select name="subject" [(ngModel)]="issueForm.subjectEmployeeCode">
+                <option value="">Không chọn</option>
+                @for (person of context?.people || []; track person.employeeCode) { <option [value]="person.employeeCode">{{ person.fullName }} – {{ person.departmentName }}</option> }
+              </select>
+              <small>Người này nhận thông báo và được phản hồi đến hết tháng.</small>
+            </label>
+          }
+          <details><summary>Thêm chi tiết (không bắt buộc)</summary>
+            <label>Đã xử lý ngay <input name="immediate" [(ngModel)]="issueForm.immediateAction" maxlength="1000" /></label>
+            <label>Hạn khắc phục <input name="due" type="date" [min]="today" [(ngModel)]="issueForm.dueDate" /></label>
+          </details>
+          <ng-container *ngTemplateOutlet="actions; context: { valid: f.valid, label: 'Gửi phiếu' }" />
+        </form>
+      }
+
+      @if (modal === 'respond' && selected) {
+        <form #f="ngForm" (ngSubmit)="f.valid && sendResponse()">
+          <p><b>{{ selected.title }}</b></p>
+          <p class="hint">Phản hồi được đến hết tháng {{ monthLabel(selected.responseMonth) }}.</p>
+          <label>Ý kiến của bạn <textarea name="explanation" rows="3" maxlength="4000" [(ngModel)]="response.explanation" required></textarea></label>
+          <label>Minh chứng <textarea name="evidence" rows="2" maxlength="4000" [(ngModel)]="response.evidence" required
+            placeholder="Mô tả hoặc đường dẫn ảnh, giấy tờ"></textarea></label>
+          <ng-container *ngTemplateOutlet="actions; context: { valid: f.valid, label: 'Gửi phản hồi' }" />
+        </form>
+      }
+
+      @if (modal === 'correct' && selected) {
+        <form #f="ngForm" (ngSubmit)="f.valid && saveAction()">
+          <p><b>{{ selected.title }}</b></p>
+          <label>Đã xử lý thế nào? <textarea name="correction" rows="3" maxlength="4000" [(ngModel)]="action.correction" required></textarea></label>
+          <label>Minh chứng (nếu có) <input name="evidence" maxlength="1000" [(ngModel)]="action.evidence" /></label>
+          <p class="hint">Gửi xong, Khoa KSNK sẽ kiểm tra và xác nhận kết quả.</p>
+          <ng-container *ngTemplateOutlet="actions; context: { valid: f.valid, label: 'Gửi kết quả xử lý' }" />
+        </form>
+      }
+
+      @if (modal === 'verify' && selected) {
+        <form #f="ngForm" (ngSubmit)="f.valid && saveAction()">
+          <p><b>{{ selected.title }}</b></p>
+          @if (selected.correction) { <p class="hint">Khoa báo: {{ selected.correction }}</p> }
+          <div class="choices two">
+            <label class="choice" [class.on]="action.passed"><input type="radio" name="passed" [value]="true" [(ngModel)]="action.passed" /><strong>Đạt</strong><small>Đóng phiếu</small></label>
+            <label class="choice danger" [class.on]="!action.passed"><input type="radio" name="passed" [value]="false" [(ngModel)]="action.passed" /><strong>Chưa đạt</strong><small>Trả lại khoa xử lý tiếp</small></label>
+          </div>
+          <label>{{ action.passed ? 'Nhận xét (không bắt buộc)' : 'Lý do chưa đạt' }}
+            <textarea name="verification" rows="2" maxlength="4000" [(ngModel)]="action.verification" [required]="!action.passed"></textarea></label>
+          <ng-container *ngTemplateOutlet="actions; context: { valid: f.valid, label: 'Xác nhận' }" />
+        </form>
+      }
+
+      @if (modal === 'member') {
+        <form #f="ngForm" (ngSubmit)="f.valid && saveMember()">
+          <label>Họ tên <input name="name" [(ngModel)]="memberForm.fullName" required maxlength="120" /></label>
+          <label>Mã nhân viên <input name="code" [(ngModel)]="memberForm.employeeCode" required maxlength="40" /></label>
+          <label>Khoa
+            <select name="dept" [(ngModel)]="memberForm.departmentCode" required>
+              <option value="" disabled>Chọn khoa</option>
+              @for (dept of departments; track dept.makhoa) { <option [value]="dept.makhoa">{{ dept.tenkhoa }}</option> }
+            </select>
+          </label>
+          <label>Vai trò
+            <select name="type" [(ngModel)]="memberForm.memberType" required>
+              <option value="" disabled>Chọn vai trò</option>
+              @for (type of memberTypes; track type) { <option [value]="type">{{ type }}</option> }
+            </select>
+          </label>
+          <ng-container *ngTemplateOutlet="actions; context: { valid: f.valid, label: 'Thêm' }" />
+        </form>
+      }
+    </dialog>
+}
+
+<ng-template #actions let-valid="valid" let-label="label">
+  @if (error) { <p class="msg bad" role="alert">{{ error }}</p> }
+  <div class="dialog-actions">
+    <button type="button" class="btn ghost" (click)="close()" [disabled]="saving">Hủy</button>
+    <button type="submit" class="btn" [disabled]="saving || !valid">{{ saving ? 'Đang lưu…' : label }}</button>
+  </div>
+</ng-template>
