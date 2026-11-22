@@ -840,7 +840,7 @@ app.post(
         memberType: body.memberType,
 
         networkTitle:
-          body.networkTitle || "Thành viên mạng lưới",
+          body.networkTitle || "Nhân viên mạng lưới",
 
         active: true,
       };
@@ -850,7 +850,7 @@ app.post(
       audit(
         data,
         req.user,
-        "Thêm thành viên mạng lưới",
+        "Thêm nhân viên mạng lưới",
         "member",
         member.id,
       );

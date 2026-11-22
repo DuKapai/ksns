@@ -25,7 +25,7 @@ export function responseWindow(item, now = new Date().toISOString()) {
 
 export async function requireRecorder(req, res, next) {
   try {
-    if (!canRecord(await readStore(), req.user)) return res.status(403).json({ message: "Chỉ thành viên mạng lưới đang hoạt động được lập phiếu." });
+    if (!canRecord(await readStore(), req.user)) return res.status(403).json({ message: "Chỉ nhân viên mạng lưới đang hoạt động được lập phiếu." });
     next();
   } catch (error) { next(error); }
 }
@@ -240,7 +240,7 @@ export function moduleRouter({ currentUser, audit }) {
       if (!member) return null;
       if (member.employeeCode === req.user.employeeCode && !req.body.active) { self = true; return null; }
       member.active = req.body.active;
-      audit(data, req.user, member.active ? "Mở lại thành viên mạng lưới" : "Ngừng thành viên mạng lưới", "member", member.id);
+      audit(data, req.user, member.active ? "Mở lại nhân viên mạng lưới" : "Ngừng nhân viên mạng lưới", "member", member.id);
       return member;
     });
     if (self) return res.status(400).json({ message: "Không thể tự ngừng tham gia của chính mình." });

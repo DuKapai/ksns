@@ -5,8 +5,8 @@
       "username": "nv.demo",
       "password": "Demo@123",
       "employeeCode": "DEMO-NV-001",
-      "fullName": "Nhân viên mẫu",
-      "position": "Nhân viên y tế",
+      "fullName": "BS. Hoàng Văn Nam",
+      "position": "Bác sĩ điều trị",
       "departmentCode": "DEMO-A",
       "departmentName": "Khoa A (mô phỏng)",
       "roles": ["STAFF"],
@@ -92,7 +92,7 @@
       "departmentCode": "DEMO-A",
       "departmentName": "Khoa A (mô phỏng)",
       "memberType": "Bác sĩ",
-      "networkTitle": "Thành viên mạng lưới",
+      "networkTitle": "Nhân viên mạng lưới",
       "active": true
     },
     {
@@ -103,7 +103,7 @@
       "departmentCode": "DEMO-A",
       "departmentName": "Khoa A (mô phỏng)",
       "memberType": "Điều dưỡng",
-      "networkTitle": "Thành viên mạng lưới",
+      "networkTitle": "Nhân viên mạng lưới",
       "active": true
     },
     {

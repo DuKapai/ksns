@@ -1,4 +1,5 @@
 <div class="app">
+  <div class="sticky-top">
   <header class="top">
     <a routerLink="/app/dashboard" class="brand">
       <img src="assets/Logo.png" alt="" />
@@ -14,14 +15,6 @@
     }
   </header>
 
-  @if (showNotices) {
-    <div class="notice-panel">
-      @for (notice of notices; track notice.id) {
-        <button type="button" [class.red]="notice.urgent" (click)="openNotice(notice)">{{ notice.text }}</button>
-      } @empty { <p class="muted">Không có thông báo mới.</p> }
-    </div>
-  }
-
   @if (context) {
     <nav class="tabs-main" aria-label="Chức năng chính">
       <a routerLink="/app/dashboard" [class.on]="section === 'dashboard'" [attr.aria-current]="section === 'dashboard' ? 'page' : null">Trang chủ</a>
@@ -29,6 +22,15 @@
       @if (isReader) { <a routerLink="/app/reports" [class.on]="section === 'reports'" [attr.aria-current]="section === 'reports' ? 'page' : null">Báo cáo</a> }
       @if (context.seesAll) { <a routerLink="/app/manage" [class.on]="section === 'manage'" [attr.aria-current]="section === 'manage' ? 'page' : null">Quản lý</a> }
     </nav>
+  }
+  </div>
+
+  @if (showNotices) {
+    <div class="notice-panel">
+      @for (notice of notices; track notice.id) {
+        <button type="button" [class.red]="notice.urgent" (click)="openNotice(notice)">{{ notice.text }}</button>
+      } @empty { <p class="muted">Không có thông báo mới.</p> }
+    </div>
   }
 
   <main>
@@ -275,7 +277,7 @@
         </nav>
         @if (manageView === 'members') { <section class="box">
           <div class="box-head">
-            <h2>Thành viên mạng lưới <small>{{ activeMembers }} đang tham gia</small></h2>
+            <h2>Nhân viên mạng lưới <small>{{ activeMembers }} đang tham gia</small></h2>
             @if (canManage) { <button type="button" class="btn small" (click)="openMember()">＋ Thêm</button> }
           </div>
           <input class="search" type="search" [(ngModel)]="search" placeholder="Tìm tên, mã nhân viên, khoa" aria-label="Tìm thành viên" />
