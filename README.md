@@ -4,11 +4,9 @@
 
 ## 1. Chạy thử nhanh
 
-**Demo trực tuyến:** https://DuKapai.github.io/ksns/
+**Bản dùng thử trực tuyến:** https://DuKapai.github.io/ksns/
 
-Bản GitHub Pages mở thẳng module, không cần đăng nhập hay chạy server. Dùng **Đổi người dùng thử** cuối trang để thử tạo phiếu → phản hồi → xử lý → xác nhận. Dữ liệu chỉ lưu trong trình duyệt đang dùng, không đồng bộ giữa các máy; quyền trên bản này chỉ mô phỏng, không bảo mật dữ liệu thật. Chỉ nhập dữ liệu giả.
-
-Lần nâng cấp này dùng kho demo mới; dữ liệu phiên bản cũ được giữ riêng trong trình duyệt, không tự đưa vào module mới.
+Mở link là dùng được ngay trên điện thoại hoặc máy tính, không cần đăng nhập, không cần cài gì. Cuối trang có 3 nút **Thành viên mạng lưới / Nhân viên y tế / Khoa KSNK** để đổi vai trò và thử trọn luồng: tạo phiếu → phản hồi → xử lý → xác nhận. Dữ liệu chỉ lưu trên trình duyệt đang dùng, không chia sẻ giữa các máy; chỉ nhập dữ liệu giả.
 
 Yêu cầu: Node.js 20.19+ (khuyến nghị Node 22 LTS) và npm.
 
@@ -124,13 +122,11 @@ Các quy trình B1–B6, xác minh ca bệnh, tích hợp HIS và các tiêu chu
 
 Kiểm thử API và adapter bằng dữ liệu cách ly: chạy `npm test` trong thư mục `server`. Các ca module bao gồm mẫu số/tổng hợp, phân quyền, lưu thông báo, phản hồi và biên hết tháng theo múi giờ Việt Nam.
 
-### Cập nhật GitHub Pages
+### Cập nhật bản dùng thử trực tuyến (dành cho người phát triển)
 
 - Chạy `npm run test:pages`, sau đó `npm run build:pages`.
-- Bản build nằm ở `client/dist/ksnk-pages/browser`, tách riêng bản chạy với backend.
-- Đưa các file trong thư mục build vào gốc repository, giữ `.nojekyll`, thay các bundle cũ mà `index.html` trước đó tham chiếu. Commit và push lên `main`.
-- GitHub Pages dùng nhánh `main`, thư mục gốc. Đường dẫn dùng hash nên tải lại các màn hình con vẫn hoạt động.
-- Adapter trình duyệt dùng cùng logic nghiệp vụ, thay lưu JSON bằng localStorage và không gọi API localhost/HIS.
+- Chép các file trong `client/dist/ksnk-pages/browser` vào thư mục gốc, xóa bộ file `main-*.js`, `polyfills-*.js`, `styles-*.css` cũ, giữ `.nojekyll`. Commit và push lên `main`; vài phút sau link trực tuyến tự cập nhật.
+- Bản trực tuyến chạy toàn bộ nghiệp vụ ngay trong trình duyệt, lưu dữ liệu bằng localStorage, không gọi máy chủ nào.
 
 ## 7. Cấu trúc
 

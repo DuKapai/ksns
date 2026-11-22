@@ -121,6 +121,7 @@ export class ModuleComponent implements OnInit, OnDestroy {
   readonly filters = [{ value: '', label: 'Tất cả' }, { value: 'new', label: 'Chờ tiếp nhận' }, { value: 'processing', label: 'Đang xử lý' },
     { value: 'waiting', label: 'Chờ xác nhận' }, { value: 'overdue', label: 'Quá hạn' }, { value: 'done', label: 'Hoàn thành' }];
   readonly memberTypes = ['Bác sĩ', 'Điều dưỡng', 'Hộ sinh', 'Kỹ thuật y', 'Lãnh đạo đơn vị', 'KSNK'];
+  readonly personas = [{ value: 'doctor', label: 'Thành viên mạng lưới' }, { value: 'staff', label: 'Nhân viên y tế' }, { value: 'ksnk', label: 'Khoa KSNK' }];
   readonly stepLabel: Record<Step, string> = { respond: 'Phản hồi', accept: 'Tiếp nhận', correct: 'Báo đã xử lý', verify: 'Xác nhận kết quả' };
   private subscriptions = new Subscription();
   private dataRequest?: Subscription;

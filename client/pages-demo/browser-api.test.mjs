@@ -79,7 +79,7 @@ test("Pages opens the simple module without login and persists the three-role wo
   const month = today.slice(0, 7);
   const monitoring = { date: today, area: "Hand hygiene", sampleSize: 10, compliant: 8, findings: "Demo finding" };
   assert.equal((await request("POST", "/monitorings", monitoring, doctor)).status, 201);
-  const form = { category: "Hand hygiene", severity: "Cao", description: "Pages demo issue", subjectEmployeeCode: "DEMO-NV-001" };
+  const form = { category: "Hand hygiene", severity: "Cao", description: "Demo issue", subjectEmployeeCode: "DEMO-NV-001" };
   assert.equal((await request("POST", "/risks", form, staff)).status, 403);
   const created = await request("POST", "/risks", form, doctor);
   assert.equal(created.status, 201);

@@ -317,14 +317,14 @@
 
   @if (isDemo && context) {
     <footer>
-      <span>Bản dùng thử · Không nhập thông tin người bệnh</span>
-      <details class="demo-options"><summary>Đổi người dùng thử</summary><label>Xem với vai trò
-        <select [ngModel]="persona" (ngModelChange)="switchPersona($event)">
-          <option value="doctor">Thành viên mạng lưới</option>
-          <option value="staff">Nhân viên y tế</option>
-          <option value="ksnk">Khoa KSNK</option>
-        </select>
-      </label></details>
+      <div class="persona" role="group" aria-label="Xem với vai trò">
+        <span class="persona-label">Xem với vai trò</span>
+        @for (option of personas; track option.value) {
+          <button type="button" [class.on]="persona === option.value" [disabled]="loading || saving"
+            [attr.aria-pressed]="persona === option.value" (click)="persona !== option.value && switchPersona(option.value)">{{ option.label }}</button>
+        }
+      </div>
+      <span class="demo-note">Bản dùng thử · Không nhập thông tin người bệnh</span>
     </footer>
   }
 </div>
