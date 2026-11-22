@@ -2,7 +2,8 @@ import { Router } from "express";
 import { readStore, updateStore, makeId } from "./store.js";
 import { validDate, validDateTime, validMonth } from "./validation.js";
 
-const networkRoles = ["MEMBER_DOCTOR", "MEMBER_NURSE", "KSNK_ADMIN", "NETWORK_LEAD", "NETWORK_DEPUTY", "NETWORK_SECRETARY"];
+const networkRoles = ["MEMBER_DOCTOR", "MEMBER_NURSE", "NETWORK_MEMBER", "DEPARTMENT_HEAD",
+  "KSNK_ADMIN", "NETWORK_LEAD", "NETWORK_DEPUTY", "NETWORK_SECRETARY"];
 export const isNetworkReader = (user) => user.roles?.some((role) => [...networkRoles, "DEPARTMENT_HEAD"].includes(role));
 export const seesAll = (user) => user.roles?.some((role) => ["KSNK_ADMIN", "NETWORK_LEAD", "NETWORK_DEPUTY", "NETWORK_SECRETARY"].includes(role));
 export const canRecord = (data, user) => user.roles?.some((role) => networkRoles.includes(role)) &&
@@ -25,7 +26,7 @@ export function responseWindow(item, now = new Date().toISOString()) {
 
 export async function requireRecorder(req, res, next) {
   try {
-    if (!canRecord(await readStore(), req.user)) return res.status(403).json({ message: "Chỉ nhân viên mạng lưới đang hoạt động được lập phiếu." });
+    if (!canRecord(await readStore(), req.user)) return res.status(403).json({ message: "Chỉ thành viên mạng lưới đang hoạt động được lập phiếu." });
     next();
   } catch (error) { next(error); }
 }
@@ -52,6 +53,31 @@ const owned = (user, item, code, name) => item.departmentCode === user.departmen
   (item[code] ? item[code] === user.employeeCode : item[name] === user.fullName);
 const percent = (part, total) => total ? Math.round(part / total * 1000) / 10 : null;
 const during = (value, from, to) => { const date = vietnamDate(value); return date && date >= from && date <= to; };
+const filled = (value) => typeof value === "string" && value.trim().length > 0;
+const caseReportTypes = ["hospital-infection", "transmission-disease"];
+const interventions = ["no", "dept", "ksnk", "hospital"];
+const transmissionOutcomes = ["ongoing", "admitted", "discharged", "transferred", "deceased"];
+const reportMemberTypes = ["Bác sĩ", "Điều dưỡng", "Hộ sinh", "Kỹ thuật y", "Lãnh đạo đơn vị"];
+const weeklyReportMemberTypes = ["Bác sĩ", "Điều dưỡng", "Hộ sinh", "Kỹ thuật y", "Lãnh đạo đơn vị"];
+const otherWeeklyReportMemberTypes = weeklyReportMemberTypes.filter((type) => type !== "Bác sĩ");
+const canFollowReports = (user) => seesAll(user) || user.roles?.includes("DEPARTMENT_HEAD");
+const validWeekRange = (from, to) => validDate(from) && validDate(to) && from <= to &&
+  to <= vietnamDate() && (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000 === 6;
+
+function summarizeWeeklyGroup(data, user, from, to, memberTypes) {
+  const members = data.members.filter((member) => member.active && memberTypes.includes(member.memberType) &&
+    (seesAll(user) || member.departmentCode === user.departmentCode));
+  const codes = new Set(members.map((member) => member.employeeCode).filter(Boolean));
+  const names = new Set(members.map((member) => member.fullName));
+  const scoped = {
+    ...data,
+    monitorings: (data.monitorings || []).filter((item) => codes.has(item.observerEmployeeCode) || names.has(item.observer)),
+    doctorObservations: (data.doctorObservations || []).filter((item) => codes.has(item.employeeCode) || names.has(item.observer)),
+    dailySurveillance: (data.dailySurveillance || []).filter((item) => codes.has(item.employeeCode) || names.has(item.submittedBy)),
+    risks: (data.risks || []).filter((item) => codes.has(item.employeeCode) || names.has(item.reporter)),
+  };
+  return summarize(scoped, user, from, to);
+}
 
 export function summarize(data, user, from, to, personal = false) {
   const allowed = (item, code, name) => isNetworkReader(user) && (personal ? owned(user, item, code, name) :
@@ -71,12 +97,33 @@ export function summarize(data, user, from, to, personal = false) {
     const items = monitorings.filter((item) => item.area === name);
     const total = items.reduce((sum, item) => sum + item.sampleSize, 0);
     const met = items.reduce((sum, item) => sum + item.compliant, 0);
-    return { name, total, met, rate: percent(met, total) };
+    const notPerformed = items.reduce((sum, item) => sum + (item.notPerformed || 0), 0);
+    return { name, total, met, notPerformed, rate: percent(met, total) };
   });
+  const departmentCompliance = [...new Set(monitorings.map((item) => `${item.departmentCode}\u0000${item.area}`))]
+    .map((key) => {
+      const [departmentCode, area] = key.split("\u0000");
+      const items = monitorings.filter((item) => item.departmentCode === departmentCode && item.area === area);
+      const total = items.reduce((sum, item) => sum + item.sampleSize, 0);
+      const met = items.reduce((sum, item) => sum + item.compliant, 0);
+      const notPerformed = items.reduce((sum, item) => sum + (item.notPerformed || 0), 0);
+      return { departmentCode, departmentName: items[0].departmentName || departmentCode, area, total, met, notPerformed,
+        rate: percent(met, total) };
+    }).sort((a, b) => String(a.departmentName || "").localeCompare(String(b.departmentName || ""), "vi") ||
+      a.area.localeCompare(b.area, "vi"));
+  const roleCompliance = [...new Set(monitorings.filter((item) => item.observedRole)
+    .map((item) => `${item.observedRole}\u0000${item.area}`))].map((key) => {
+      const [role, area] = key.split("\u0000");
+      const items = monitorings.filter((item) => item.observedRole === role && item.area === area);
+      const total = items.reduce((sum, item) => sum + item.sampleSize, 0);
+      const met = items.reduce((sum, item) => sum + item.compliant, 0);
+      const notPerformed = items.reduce((sum, item) => sum + (item.notPerformed || 0), 0);
+      return { role, area, total, met, notPerformed, rate: percent(met, total) };
+    }).sort((a, b) => a.role.localeCompare(b.role, "vi") || a.area.localeCompare(b.area, "vi"));
   return {
     monitoringCount: monitorings.length + observations.length + daily.length,
     risksFound: risks.length, risksClosed: closed, closureRate: percent(closed, risks.length),
-    categories, compliance,
+    categories, compliance, departmentCompliance, roleCompliance,
   };
 }
 
@@ -92,6 +139,8 @@ function reportFor(data, member, month) {
 export function moduleRouter({ currentUser, audit }) {
   const router = Router();
   const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+  const hasDoctorRole = (req, res, next) => req.user.roles?.includes("MEMBER_DOCTOR")
+    ? next() : res.status(403).json({ message: "Chỉ bác sĩ được lập phiếu ca bệnh." });
   router.use(currentUser);
   router.get("/context", asyncRoute(async (req, res) => {
     const data = await readStore();
@@ -132,10 +181,9 @@ export function moduleRouter({ currentUser, audit }) {
     const reportMonth = previous.toISOString().slice(0, 7);
     const reportDay = data.doctorConfig?.reportDay ?? 5;
     const reportDue = `${month}-${String(reportDay).padStart(2, "0")}`;
-    const reportTypes = ["Bác sĩ", "Điều dưỡng", "Hộ sinh", "Kỹ thuật y"];
     const monthText = (value) => `${value.slice(5, 7)}/${value.slice(0, 4)}`;
     const required = isNetworkReader(req.user) ? data.members.filter((member) => member.active &&
-      reportTypes.includes(member.memberType) &&
+      reportMemberTypes.includes(member.memberType) &&
       (seesAll(req.user) || member.departmentCode === req.user.departmentCode)) : [];
     const missing = required.filter((member) => !reportFor(data, member, reportMonth));
     const notices = [
@@ -178,7 +226,7 @@ export function moduleRouter({ currentUser, audit }) {
         reportMissing: missing.map(({ fullName, departmentName }) => ({ fullName, departmentName })),
         ownReportConfirmed: Boolean(reportFor(data, req.user, reportMonth)),
         ownReportRequired: data.members.some((member) => member.active && member.employeeCode === req.user.employeeCode &&
-          reportTypes.includes(member.memberType)),
+          reportMemberTypes.includes(member.memberType)),
       },
       tasks: dueTasks, notices, activity,
     });
@@ -186,6 +234,266 @@ export function moduleRouter({ currentUser, audit }) {
   router.get("/report-summary", requireRecorder, asyncRoute(async (req, res) => {
     if (!validMonth(req.query.month)) return res.status(400).json({ message: "Tháng báo cáo không hợp lệ." });
     res.json({ summary: monthlySummary(await readStore(), req.user, req.query.month) });
+  }));
+  router.get("/report-readiness", asyncRoute(async (req, res) => {
+    if (!canFollowReports(req.user)) {
+      return res.status(403).json({ message: "Chỉ Khoa KSNK hoặc lãnh đạo khoa được theo dõi tình trạng đủ mẫu." });
+    }
+    const { from, to } = req.query;
+    if (!validMonth(from) || !validMonth(to) || from > to) {
+      return res.status(400).json({ message: "Chọn khoảng tháng hợp lệ để kiểm tra đủ mẫu báo cáo." });
+    }
+    const start = new Date(`${from}-01T00:00:00Z`);
+    const end = new Date(`${to}-01T00:00:00Z`);
+    const monthCount = (end.getUTCFullYear() - start.getUTCFullYear()) * 12 +
+      end.getUTCMonth() - start.getUTCMonth() + 1;
+    if (monthCount > 24) return res.status(400).json({ message: "Khoảng tổng hợp không được vượt quá 24 tháng." });
+    const data = await readStore();
+    const members = data.members.filter((member) => member.active && reportMemberTypes.includes(member.memberType) &&
+      (seesAll(req.user) || member.departmentCode === req.user.departmentCode));
+    const months = Array.from({ length: monthCount }, (_, index) => {
+      const month = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + index, 1));
+      return month.toISOString().slice(0, 7);
+    });
+    const groups = {
+      doctors: { required: 0, submitted: 0 },
+      members: { required: 0, submitted: 0 },
+    };
+    const missing = [];
+    for (const month of months) {
+      for (const member of members) {
+        const group = member.memberType === "Bác sĩ" ? groups.doctors : groups.members;
+        group.required += 1;
+        if (reportFor(data, member, month)) group.submitted += 1;
+        else missing.push({ month, fullName: member.fullName, departmentName: member.departmentName, memberType: member.memberType });
+      }
+    }
+    const withReadiness = (group) => ({
+      ...group,
+      rate: percent(group.submitted, group.required),
+      complete: group.required > 0 && group.submitted === group.required,
+    });
+    const doctors = withReadiness(groups.doctors);
+    const otherMembers = withReadiness(groups.members);
+    const required = doctors.required + otherMembers.required;
+    const submitted = doctors.submitted + otherMembers.submitted;
+    res.json({
+      from, to, required, submitted, rate: percent(submitted, required),
+      complete: doctors.required > 0 && otherMembers.required > 0 && doctors.complete && otherMembers.complete,
+      doctors, members: otherMembers, missing,
+    });
+  }));
+  router.get("/weekly-reports", requireNetworkReader, asyncRoute(async (req, res) => {
+    const { from, to } = req.query;
+    if (!validWeekRange(from, to)) {
+      return res.status(400).json({ message: "Chọn đúng khoảng 7 ngày trong quá khứ để xem báo cáo tuần." });
+    }
+    const data = await readStore();
+    const visibleMembers = data.members.filter((member) => member.active &&
+      weeklyReportMemberTypes.includes(member.memberType) &&
+      (seesAll(req.user) || member.departmentCode === req.user.departmentCode));
+    const weeklyReports = data.weeklyReports || [];
+    const members = visibleMembers.filter((member) => otherWeeklyReportMemberTypes.includes(member.memberType));
+    const doctors = visibleMembers.filter((member) => member.memberType === "Bác sĩ");
+    const submitted = (member) => weeklyReports.some((report) => report.from === from && report.to === to &&
+      report.employeeCode === member.employeeCode && report.departmentCode === member.departmentCode);
+    const readinessGroup = (group) => {
+      const count = group.filter(submitted).length;
+      return { required: group.length, submitted: count, rate: percent(count, group.length),
+        complete: group.length > 0 && count === group.length };
+    };
+    const doctorReadiness = readinessGroup(doctors);
+    const memberReadiness = readinessGroup(members);
+    const required = doctorReadiness.required + memberReadiness.required;
+    const confirmed = doctorReadiness.submitted + memberReadiness.submitted;
+    const canReview = canFollowReports(req.user);
+    const byGroup = (types) => weeklyReports.filter((item) => item.from === from && item.to === to &&
+      types.includes(item.memberType) &&
+      (seesAll(req.user) || item.departmentCode === req.user.departmentCode))
+      .sort((a, b) => String(a.departmentName).localeCompare(String(b.departmentName), "vi") ||
+        String(a.submittedBy).localeCompare(String(b.submittedBy), "vi"));
+    const visibleReports = weeklyReports.filter((item) => item.from === from && item.to === to &&
+      (seesAll(req.user) || item.departmentCode === req.user.departmentCode) &&
+      (canReview || item.employeeCode === req.user.employeeCode));
+    const allSummary = summarizeWeeklyGroup(data, req.user, from, to, weeklyReportMemberTypes);
+    res.json({
+      from, to,
+      items: visibleReports,
+      summaries: {
+        all: allSummary,
+        doctors: summarizeWeeklyGroup(data, req.user, from, to, ["Bác sĩ"]),
+        members: summarizeWeeklyGroup(data, req.user, from, to, otherWeeklyReportMemberTypes),
+      },
+      readiness: canReview ? {
+        required, submitted: confirmed, rate: percent(confirmed, required),
+        complete: doctorReadiness.complete && memberReadiness.complete,
+        doctors: doctorReadiness, members: memberReadiness,
+        missing: visibleMembers.filter((member) => !submitted(member)).map((member) => ({
+          fullName: member.fullName, departmentName: member.departmentName, memberType: member.memberType,
+        })),
+      } : null,
+    });
+  }));
+  router.post("/weekly-reports", requireRecorder, asyncRoute(async (req, res) => {
+    const body = req.body || {};
+    const fields = ["activities", "difficulties", "nextWeekPlan", "recommendations"];
+    if (!validWeekRange(body.from, body.to) ||
+        fields.some((key) => body[key] !== undefined && (typeof body[key] !== "string" || body[key].length > 4000)) ||
+        !filled(body.activities)) {
+      return res.status(400).json({ message: "Báo cáo tuần cần đúng 7 ngày và có nội dung công việc đã triển khai." });
+    }
+    const result = await updateStore((data) => {
+      const member = data.members.find((item) => item.active && item.employeeCode === req.user.employeeCode &&
+        item.departmentCode === req.user.departmentCode && weeklyReportMemberTypes.includes(item.memberType));
+      if (!member) return { status: 403, message: "Chỉ bác sĩ hoặc điều dưỡng đang là thành viên mạng lưới được gửi báo cáo tuần." };
+      data.weeklyReports ||= [];
+      const existing = data.weeklyReports.find((item) => item.from === body.from && item.to === body.to &&
+        item.employeeCode === req.user.employeeCode && item.departmentCode === req.user.departmentCode);
+      const { versions, ...previous } = existing || {};
+      const record = {
+        id: existing?.id || makeId("weeklyReport"),
+        from: body.from, to: body.to,
+        activities: body.activities.trim(),
+        difficulties: body.difficulties?.trim() || "",
+        nextWeekPlan: body.nextWeekPlan?.trim() || "",
+        recommendations: body.recommendations?.trim() || "",
+        employeeCode: req.user.employeeCode, submittedBy: req.user.fullName,
+        memberType: member.memberType, departmentCode: req.user.departmentCode,
+        departmentName: req.user.departmentName, createdAt: new Date().toISOString(),
+        status: "Đã gửi",
+      };
+      if (existing) Object.assign(existing, record, { versions: [...(versions || []), previous] });
+      else data.weeklyReports.unshift(record);
+      audit(data, req.user, "Gửi báo cáo tuần thành viên mạng lưới", "weeklyReport", record.id);
+      return { status: 201, item: record };
+    });
+    res.status(result.status).json(result.item ? { item: result.item } : { message: result.message });
+  }));
+  router.get("/case-reports", asyncRoute(async (req, res) => {
+    if (!req.user.roles?.includes("MEMBER_DOCTOR") && !seesAll(req.user)) {
+      return res.status(403).json({ message: "Chỉ bác sĩ và Khoa KSNK được xem báo cáo ca bệnh." });
+    }
+    const { from, to } = req.query;
+    if (!validDate(from) || !validDate(to) || from > to) {
+      return res.status(400).json({ message: "Chọn khoảng ngày hợp lệ để tổng hợp ca bệnh." });
+    }
+    const data = await readStore();
+    const items = (data.caseReports || []).filter((item) =>
+      (seesAll(req.user) || item.departmentCode === req.user.departmentCode) &&
+      during(item.date, from, to)
+    ).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.createdAt).localeCompare(String(a.createdAt)));
+    const infectionTypes = ["urinary", "respiratory", "bloodstream", "surgical-wound"].map((type) => ({
+      type, count: items.filter((item) => item.type === "hospital-infection" && item.infectionType === type).length,
+      rate: percent(items.filter((item) => item.type === "hospital-infection" && item.infectionType === type).length,
+        items.filter((item) => item.type === "hospital-infection").length),
+    }));
+    const interventionStats = interventions.map((value) => ({
+      value, count: items.filter((item) => item.interventionNeeded === value).length,
+      rate: percent(items.filter((item) => item.interventionNeeded === value).length, items.length),
+    }));
+    const transmissionCases = items.filter((item) => item.type === "transmission-disease");
+    const transmissionByDisease = [...new Set(transmissionCases.map((item) => item.diagnosisName))]
+      .sort((a, b) => a.localeCompare(b, "vi")).map((disease) => {
+        const cases = transmissionCases.filter((item) => item.diagnosisName === disease);
+        return {
+          disease, total: cases.length,
+          suspected: cases.filter((item) => item.caseClassification === "suspected").length,
+          confirmed: cases.filter((item) => item.caseClassification === "confirmed").length,
+          admitted: cases.filter((item) => item.outcome === "admitted").length,
+          discharged: cases.filter((item) => item.outcome === "discharged").length,
+          transferred: cases.filter((item) => item.outcome === "transferred").length,
+          deceased: cases.filter((item) => item.outcome === "deceased").length,
+          rate: percent(cases.length, transmissionCases.length),
+          suspectedRate: percent(cases.filter((item) => item.caseClassification === "suspected").length, cases.length),
+          confirmedRate: percent(cases.filter((item) => item.caseClassification === "confirmed").length, cases.length),
+          admittedRate: percent(cases.filter((item) => item.outcome === "admitted").length, cases.length),
+          dischargedRate: percent(cases.filter((item) => item.outcome === "discharged").length, cases.length),
+          transferredRate: percent(cases.filter((item) => item.outcome === "transferred").length, cases.length),
+          deceasedRate: percent(cases.filter((item) => item.outcome === "deceased").length, cases.length),
+        };
+      });
+    res.json({
+      items,
+      summary: {
+        total: items.length,
+        hospitalInfections: items.filter((item) => item.type === "hospital-infection").length,
+        transmissionDiseases: items.filter((item) => item.type === "transmission-disease").length,
+        interventionStats, infectionTypes, transmissionByDisease,
+      },
+    });
+  }));
+  router.post("/case-reports", hasDoctorRole, requireRecorder, asyncRoute(async (req, res) => {
+    const b = req.body || {};
+    const today = vietnamDate();
+    const optionalString = (value, max) => value === undefined || (typeof value === "string" && value.length <= max);
+    const genderValues = ["Nam", "Nữ", "Khác/không rõ"];
+    const validBirthYear = b.patientBirthYear === undefined || b.patientBirthYear === null ||
+      Number.isInteger(b.patientBirthYear) && b.patientBirthYear >= 1900 &&
+      b.patientBirthYear <= Number(today.slice(0, 4));
+    const validAdmissionDate = b.admissionDate === undefined || b.admissionDate === "" ||
+      validDate(b.admissionDate) && b.admissionDate <= today;
+    const baseValid = caseReportTypes.includes(b.type) && validDate(b.date) && b.date <= today &&
+      filled(b.diagnosisName) && b.diagnosisName.length <= 200 &&
+      interventions.includes(b.interventionNeeded) &&
+      (b.interventionNeeded === "no" || filled(b.interventionDetails)) &&
+      optionalString(b.patientName, 120) && optionalString(b.diagnosisCode, 40) &&
+      validBirthYear && (b.patientGender === undefined || b.patientGender === "" || genderValues.includes(b.patientGender)) &&
+      optionalString(b.patientAddress, 200) && validAdmissionDate &&
+      optionalString(b.interventionDetails, 2000) &&
+      (b.onsetDate === undefined || b.onsetDate === "" || validDate(b.onsetDate) && b.onsetDate <= b.date);
+    const infectionValid = b.type !== "hospital-infection" ||
+      ["urinary", "respiratory", "bloodstream", "surgical-wound"].includes(b.infectionType);
+    const transmissionValid = b.type !== "transmission-disease" ||
+      (["suspected", "confirmed"].includes(b.caseClassification) &&
+       transmissionOutcomes.includes(b.outcome) &&
+       optionalString(b.labResult, 1000) && optionalString(b.caseNote, 2000) &&
+       optionalString(b.preventiveMeasures, 2000) &&
+       (b.isolationStartDate === undefined || b.isolationStartDate === "" || validDate(b.isolationStartDate)) &&
+       (b.isolationEndDate === undefined || b.isolationEndDate === "" || validDate(b.isolationEndDate)) &&
+       (!b.isolationStartDate || !b.isolationEndDate || b.isolationEndDate >= b.isolationStartDate));
+    if (!baseValid || !infectionValid || !transmissionValid) {
+      return res.status(400).json({ message: "Phiếu ca bệnh chưa hợp lệ. Kiểm tra ngày, chẩn đoán, loại bệnh và phương án xử trí." });
+    }
+    const item = await updateStore((data) => {
+      data.caseReports ||= [];
+      const record = {
+        id: makeId("caseReport"), type: b.type, date: b.date,
+        employeeCode: req.user.employeeCode, doctor: req.user.fullName,
+        departmentCode: req.user.departmentCode, departmentName: req.user.departmentName,
+        patientName: b.patientName?.trim() || "", diagnosisCode: b.diagnosisCode?.trim() || "",
+        patientBirthYear: Number.isInteger(b.patientBirthYear) ? b.patientBirthYear : null,
+        patientGender: b.patientGender || "", patientAddress: b.patientAddress?.trim() || "",
+        admissionDate: b.admissionDate || "",
+        diagnosisName: b.diagnosisName.trim(), onsetDate: b.onsetDate || "",
+        infectionType: b.type === "hospital-infection" ? b.infectionType : "",
+        isolationStartDate: b.type === "transmission-disease" ? b.isolationStartDate || "" : "",
+        isolationEndDate: b.type === "transmission-disease" ? b.isolationEndDate || "" : "",
+        preventiveMeasures: b.type === "transmission-disease" ? b.preventiveMeasures?.trim() || "" : "",
+        caseClassification: b.type === "transmission-disease" ? b.caseClassification : "",
+        outcome: b.type === "transmission-disease" ? b.outcome : "",
+        labResult: b.type === "transmission-disease" ? b.labResult?.trim() || "" : "",
+        caseNote: b.type === "transmission-disease" ? b.caseNote?.trim() || "" : "",
+        interventionNeeded: b.interventionNeeded,
+        interventionDetails: b.interventionNeeded === "no" ? "" : b.interventionDetails.trim(),
+        createdAt: new Date().toISOString(),
+      };
+      data.caseReports.unshift(record);
+      if (["ksnk", "hospital"].includes(record.interventionNeeded)) {
+        const recipients = new Set((data.users || []).filter((user) => user.active &&
+          user.roles?.some((role) => ["KSNK_ADMIN", "NETWORK_LEAD", "NETWORK_DEPUTY", "NETWORK_SECRETARY"].includes(role)))
+          .map((user) => user.employeeCode).filter(Boolean));
+        for (const recipient of recipients) {
+          (data.notifications ||= []).unshift({
+            id: makeId("notice"), recipient, reportMonth: record.date.slice(0, 7),
+            text: `Bác sĩ cần ${record.interventionNeeded === "hospital" ? "phối hợp toàn viện" : "Khoa KSNK phối hợp"}: ${record.diagnosisName}`,
+            urgent: record.interventionNeeded === "hospital", at: record.createdAt,
+          });
+        }
+      }
+      audit(data, req.user, "Tạo phiếu ca bệnh KSNK", "caseReport", record.id);
+      return record;
+    });
+    res.status(201).json({ item });
   }));
   router.get("/issues", asyncRoute(async (req, res) => {
     const data = await readStore();
@@ -240,7 +548,7 @@ export function moduleRouter({ currentUser, audit }) {
       if (!member) return null;
       if (member.employeeCode === req.user.employeeCode && !req.body.active) { self = true; return null; }
       member.active = req.body.active;
-      audit(data, req.user, member.active ? "Mở lại nhân viên mạng lưới" : "Ngừng nhân viên mạng lưới", "member", member.id);
+      audit(data, req.user, member.active ? "Mở lại thành viên mạng lưới" : "Ngừng thành viên mạng lưới", "member", member.id);
       return member;
     });
     if (self) return res.status(400).json({ message: "Không thể tự ngừng tham gia của chính mình." });

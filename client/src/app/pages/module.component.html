@@ -10,7 +10,7 @@
         <button type="button" class="bell" (click)="showNotices = !showNotices" [attr.aria-expanded]="showNotices">
           Thông báo @if (notices.length) { <b>{{ notices.length }}</b> }
         </button>
-        <div class="who"><strong>{{ user.fullName }}</strong><small>{{ user.departmentName }}</small></div>
+        <div class="who"><strong>{{ user.fullName }}</strong><small>{{ user.position }} · {{ user.departmentName }}</small></div>
       </div>
     }
   </header>
@@ -42,7 +42,38 @@
       <h1>{{ title }}</h1>
       <!-- TRANG CHỦ -->
       @if (section === 'dashboard') {
-        @if (canRecord) {
+        @if (canCreateCaseReport) {
+          <section class="workflow-card doctor-workflow" aria-labelledby="doctor-workflow-title">
+            <div class="workflow-intro">
+              <span class="workflow-kicker">Nghiệp vụ bác sĩ</span>
+              <h2 id="doctor-workflow-title">Ghi nhận và xử trí ca bệnh</h2>
+              <p>Lập phiếu ca bệnh, chọn phương án xử trí; bác sĩ và khoa được lấy tự động theo tài khoản đăng nhập.</p>
+            </div>
+            <div class="role-actions">
+              <button type="button" class="role-action primary" (click)="openInfectionReport()">
+                <span class="role-step">01</span><span><strong>Nhiễm khuẩn bệnh viện</strong><small>Tiết niệu, thở máy, máu, vết mổ…</small></span>
+              </button>
+              <button type="button" class="role-action" (click)="openTransmissionReport()">
+                <span class="role-step">02</span><span><strong>Bệnh truyền nhiễm / cách ly</strong><small>Ghi nhận ca bệnh và tình trạng cách ly</small></span>
+              </button>
+              <button type="button" class="role-action" (click)="go('reports')">
+                <span class="role-step">03</span><span><strong>Báo cáo tuần bác sĩ</strong><small>Công việc, kết quả và khó khăn trong tuần</small></span>
+              </button>
+            </div>
+          </section>
+        } @else if (persona === 'member' && canRecord) {
+          <section class="workflow-card member-workflow" aria-labelledby="member-workflow-title">
+            <div class="workflow-intro">
+              <span class="workflow-kicker">Nghiệp vụ thành viên mạng lưới</span>
+              <h2 id="member-workflow-title">Giám sát và ghi nhận tại khoa</h2>
+              <p>Điều dưỡng dùng bảng kiểm vệ sinh tay, phương tiện phòng hộ và phân loại chất thải; các chức danh khác ghi nhận công việc được giao.</p>
+            </div>
+            <div class="quick">
+              <button type="button" (click)="openMonitoring()"><strong>Ghi phiếu giám sát</strong><small>Mở bảng kiểm theo nhiệm vụ của bạn</small></button>
+              <button type="button" (click)="openIssue()"><strong>Ghi nhận vấn đề</strong><small>Báo việc chưa đúng hoặc nguy cơ tại khoa</small></button>
+            </div>
+          </section>
+        } @else if (canRecord) {
           <div class="quick">
             <button type="button" (click)="openMonitoring()"><strong>Ghi nhận giám sát</strong><small>Đếm số lần làm đúng khi quan sát</small></button>
             <button type="button" (click)="openIssue()"><strong>Ghi nhận vấn đề</strong><small>Việc làm chưa đúng, nguy cơ, sự cố</small></button>
@@ -102,12 +133,13 @@
             @if (stats.length) {
               <div class="scroll">
                 <table>
-                  <thead><tr><th>Nội dung</th><th>Làm đúng<small>% số lần quan sát</small></th><th>Vấn đề<small>% trên tổng</small></th><th>Đã xử lý xong<small>% số vấn đề</small></th></tr></thead>
+                  <thead><tr><th>Nội dung</th><th>Làm đúng<small>% số lần · số lượt không VST</small></th><th>Vấn đề<small>% trên tổng</small></th><th>Đã xử lý xong<small>% số vấn đề</small></th></tr></thead>
                   <tbody>
                     @for (row of stats; track row.name) {
                       <tr>
                         <td>{{ row.name }}</td>
-                        <td>@if (row.checked) { {{ row.met }}/{{ row.checked }} · <b>{{ rate(row.rate) }}</b> } @else { — }</td>
+                        <td>@if (row.checked) { {{ row.met }}/{{ row.checked }} · <b>{{ rate(row.rate) }}</b>
+                          @if (row.notPerformed) { · {{ row.notPerformed }} không VST } } @else { — }</td>
                         <td>{{ row.issues }} @if (row.issues) { · {{ rate(row.share) }} }</td>
                         <td>{{ row.closed }} @if (row.issues) { · {{ rate(row.closedRate) }} }</td>
                       </tr>
@@ -117,6 +149,32 @@
                 </table>
               </div>
             } @else { <p class="muted">Chưa có số liệu trong khoảng này.</p> }
+            @if (overview.summary.departmentCompliance.length) {
+              <h3>Kết quả theo khoa/phòng</h3>
+              <div class="scroll"><table>
+                <thead><tr><th>Khoa/phòng</th><th>Nội dung</th><th>Tổng cơ hội</th><th>Đúng</th><th>Thực hiện chưa đúng</th><th>Không VST</th><th>Tỷ lệ đúng</th></tr></thead>
+                <tbody>
+                  @for (item of overview.summary.departmentCompliance; track item.departmentCode + item.area) {
+                    <tr><td>{{ item.departmentName }}</td><td>{{ item.area }}</td><td>{{ item.total }}</td>
+                      <td>{{ item.met }}</td><td>{{ item.total - item.met - item.notPerformed }}</td>
+                      <td>{{ item.notPerformed }}</td><td>{{ rate(item.rate) }}</td></tr>
+                  }
+                </tbody>
+              </table></div>
+            }
+            @if (overview.summary.roleCompliance.length) {
+              <h3>Kết quả theo đối tượng được giám sát</h3>
+              <div class="scroll"><table>
+                <thead><tr><th>Đối tượng</th><th>Nội dung</th><th>Tổng cơ hội</th><th>Đúng</th><th>Thực hiện chưa đúng</th><th>Không VST</th><th>Tỷ lệ đúng</th></tr></thead>
+                <tbody>
+                  @for (item of overview.summary.roleCompliance; track item.role + item.area) {
+                    <tr><td>{{ item.role }}</td><td>{{ item.area }}</td><td>{{ item.total }}</td>
+                      <td>{{ item.met }}</td><td>{{ item.total - item.met - item.notPerformed }}</td>
+                      <td>{{ item.notPerformed }}</td><td>{{ rate(item.rate) }}</td></tr>
+                  }
+                </tbody>
+              </table></div>
+            }
           </section>
 
           <section class="box">
@@ -208,7 +266,9 @@
           <ng-container *ngTemplateOutlet="periodPicker" />
           @for (item of filteredMonitorings; track item.id) {
             <div class="row">
-              <div><strong>{{ item.area }}</strong><small>{{ date(item.date) }} · {{ item.observer }}@if (item.compliant < item.sampleSize) { · {{ item.findings }} }</small></div>
+              <div><strong>{{ item.area }}</strong><small>{{ date(item.date) }} · {{ item.observer }}
+                @if (item.notPerformed) { · {{ item.notPerformed }} lượt không VST }
+                @if (item.compliant < item.sampleSize) { · {{ item.findings }} }</small></div>
               <span class="badge">{{ item.sampleSize ? item.compliant + '/' + item.sampleSize + ' đúng' : 'Không có lượt quan sát' }}</span>
             </div>
           } @empty { <p class="muted center">Chưa có lượt giám sát trong khoảng này.</p> }
@@ -217,10 +277,218 @@
 
       <!-- BÁO CÁO -->
       @if (section === 'reports') {
+        <nav class="seg" aria-label="Loại báo cáo">
+          <button type="button" [class.on]="reportView === 'weekly'" (click)="reportView = 'weekly'">Báo cáo tuần</button>
+          <button type="button" [class.on]="reportView === 'monthly'" (click)="reportView = 'monthly'">Báo cáo tháng</button>
+        </nav>
+
+        @if (reportView === 'weekly') {
+          @if (canSubmitWeeklyReport) {
+            <section class="box">
+              <h2>Báo cáo tuần của tôi</h2>
+              <p class="hint">{{ user?.fullName }} · {{ user?.position }} · {{ user?.departmentName }} (tự lấy theo tài khoản)</p>
+              @if (!canSubmitWeeklyReport) {
+                <div class="two">
+                  <label>Từ ngày <input type="date" [(ngModel)]="weekFrom" [max]="today" (change)="weeklyRangeChanged()" /></label>
+                  <label>Đến ngày <input type="date" [(ngModel)]="weekTo" [max]="today" (change)="weeklyRangeChanged()" /></label>
+                </div>
+              }
+              @if (!weeklyRangeValid) { <p class="red-text">Chọn khoảng đúng 7 ngày, không vượt quá hôm nay.</p> }
+              @if (myWeeklyReport) { <p class="ok-text">✓ Đã gửi báo cáo kỳ này ngày {{ date(myWeeklyReport.createdAt) }}. Có thể cập nhật trước khi tổng hợp.</p> }
+              <form #weeklyFormElement="ngForm" (ngSubmit)="saveWeeklyReport()">
+                <label>Công việc đã triển khai trong tuần
+                  <textarea name="activities" rows="3" maxlength="4000" [(ngModel)]="weeklyForm.activities" required
+                    placeholder="Ghi ngắn gọn các hoạt động kiểm soát nhiễm khuẩn đã thực hiện"></textarea>
+                </label>
+                <label>Khó khăn, vướng mắc
+                  <textarea name="difficulties" rows="2" maxlength="4000" [(ngModel)]="weeklyForm.difficulties"></textarea>
+                </label>
+                <label>Kế hoạch công tác tuần tới
+                  <textarea name="nextWeekPlan" rows="2" maxlength="4000" [(ngModel)]="weeklyForm.nextWeekPlan"></textarea>
+                </label>
+                <label>Đề xuất, kiến nghị
+                  <textarea name="recommendations" rows="2" maxlength="4000" [(ngModel)]="weeklyForm.recommendations"></textarea>
+                </label>
+                <button type="submit" class="btn" [disabled]="saving || !weeklyFormElement.valid || !weeklyRangeValid">
+                  {{ saving ? 'Đang lưu…' : myWeeklyReport ? 'Cập nhật báo cáo tuần' : 'Gửi báo cáo tuần' }}
+                </button>
+              </form>
+            </section>
+          }
+
+          <section class="box">
+            <div class="box-head">
+              <h2>Tổng hợp báo cáo tuần</h2>
+              @if (canFollowReports) {
+                <button type="button" class="link" (click)="exportWeeklyReport()"
+                  [disabled]="!selectedWeeklySummary || (weeklyReportGroup === 'all' && (!weeklyReportReadiness || !weeklyReportReadiness.complete))">
+                  Xuất báo cáo tuần Excel
+                </button>
+              }
+            </div>
+            <div class="two">
+              <label>Từ ngày <input type="date" [(ngModel)]="weekFrom" [max]="today" (change)="weeklyRangeChanged()" /></label>
+              <label>Đến ngày <input type="date" [(ngModel)]="weekTo" [max]="today" (change)="weeklyRangeChanged()" /></label>
+            </div>
+            @if (canFollowReports) {
+              <label class="inline">Loại báo cáo
+                <select [(ngModel)]="weeklyReportGroup" aria-label="Loại báo cáo tuần">
+                  <option value="all">3 · Toàn mạng lưới</option>
+                  <option value="doctors">1 · Bác sĩ</option>
+                  <option value="members">2 · Thành viên mạng lưới khác</option>
+                </select>
+              </label>
+              @if (weeklyReportReadiness) {
+                <p class="hint">Mẫu tuần {{ date(weekFrom) }} – {{ date(weekTo) }}:
+                  bác sĩ {{ weeklyReportReadiness.doctors.submitted }}/{{ weeklyReportReadiness.doctors.required }}
+                  @if (weeklyReportReadiness.doctors.rate !== null) { ({{ weeklyReportReadiness.doctors.rate }}%) };
+                  thành viên khác {{ weeklyReportReadiness.members.submitted }}/{{ weeklyReportReadiness.members.required }}
+                  @if (weeklyReportReadiness.members.rate !== null) { ({{ weeklyReportReadiness.members.rate }}%) }.
+                  @if (!weeklyReportReadiness.complete) { Báo cáo toàn mạng lưới chỉ xuất khi đủ cả hai nhóm. }
+                  @else { Đã đủ mẫu để xuất báo cáo toàn mạng lưới. }
+                </p>
+                @if (!weeklyReportReadiness.complete && weeklyReportReadiness.missing.length) {
+                  <small class="red-text">Chưa gửi:
+                    @for (person of weeklyReportReadiness.missing; track person.memberType + person.fullName) {
+                      {{ person.fullName }} ({{ person.memberType }}, {{ person.departmentName }})@if (!$last) {; }
+                    }
+                  </small>
+                }
+              }
+            }
+            @if (selectedWeeklySummary; as summary) {
+              <p class="hint">{{ date(weekFrom) }} – {{ date(weekTo) }} · {{ filteredWeeklyReports.length }} báo cáo đã gửi.</p>
+              <div class="tiles three">
+                <div><b>{{ summary.monitoringCount }}</b><small>Lượt giám sát</small></div>
+                <div><b>{{ summary.risksFound }}</b><small>Vấn đề</small></div>
+                <div><b>{{ summary.risksClosed }}</b><small>Đã xử lý · {{ rate(summary.closureRate) }}</small></div>
+              </div>
+              @if (summary.compliance.length) {
+                <h3>Kết quả giám sát theo nội dung</h3>
+                <div class="scroll"><table>
+                  <thead><tr><th>Nội dung</th><th>Tổng cơ hội</th><th>Đạt</th><th>Thực hiện chưa đúng</th><th>Không VST</th><th>Tỷ lệ</th></tr></thead>
+                  <tbody>
+                    @for (item of summary.compliance; track item.name) {
+                      <tr><td>{{ item.name }}</td><td>{{ item.total }}</td><td>{{ item.met }}</td>
+                        <td>{{ item.total - item.met - item.notPerformed }}</td><td>{{ item.notPerformed }}</td><td>{{ rate(item.rate) }}</td></tr>
+                    }
+                  </tbody>
+                </table></div>
+              }
+              @if (summary.departmentCompliance.length) {
+                <h3>Theo khoa/phòng</h3>
+                <div class="scroll"><table>
+                  <thead><tr><th>Khoa/phòng</th><th>Nội dung</th><th>Tổng cơ hội</th><th>Đạt</th><th>Thực hiện chưa đúng</th><th>Không VST</th><th>Tỷ lệ</th></tr></thead>
+                  <tbody>
+                    @for (item of summary.departmentCompliance; track item.departmentCode + item.area) {
+                      <tr><td>{{ item.departmentName }}</td><td>{{ item.area }}</td><td>{{ item.total }}</td><td>{{ item.met }}</td>
+                        <td>{{ item.total - item.met - item.notPerformed }}</td><td>{{ item.notPerformed }}</td><td>{{ rate(item.rate) }}</td></tr>
+                    }
+                  </tbody>
+                </table></div>
+              }
+              @if (summary.roleCompliance.length) {
+                <h3>Theo đối tượng được giám sát</h3>
+                <div class="scroll"><table>
+                  <thead><tr><th>Đối tượng</th><th>Nội dung</th><th>Tổng cơ hội</th><th>Đạt</th><th>Thực hiện chưa đúng</th><th>Không VST</th><th>Tỷ lệ</th></tr></thead>
+                  <tbody>
+                    @for (item of summary.roleCompliance; track item.role + item.area) {
+                      <tr><td>{{ item.role }}</td><td>{{ item.area }}</td><td>{{ item.total }}</td><td>{{ item.met }}</td>
+                        <td>{{ item.total - item.met - item.notPerformed }}</td><td>{{ item.notPerformed }}</td><td>{{ rate(item.rate) }}</td></tr>
+                    }
+                  </tbody>
+                </table></div>
+              }
+            }
+            @if (weeklyReportGroup !== 'all' || !canFollowReports || weeklyReportReadiness?.complete) {
+              @if (filteredWeeklyReports.length) {
+                <h3>Báo cáo công việc của thành viên</h3>
+                @for (item of filteredWeeklyReports; track item.id) {
+                  <details class="row">
+                    <summary><strong>{{ item.submittedBy }}</strong><small>{{ item.memberType }} · {{ item.departmentName }}</small></summary>
+                    <p><b>Công việc đã triển khai:</b> {{ item.activities }}</p>
+                    @if (item.difficulties) { <p><b>Khó khăn:</b> {{ item.difficulties }}</p> }
+                    @if (item.nextWeekPlan) { <p><b>Kế hoạch tuần tới:</b> {{ item.nextWeekPlan }}</p> }
+                    @if (item.recommendations) { <p><b>Đề xuất:</b> {{ item.recommendations }}</p> }
+                  </details>
+                }
+              } @else { <p class="muted">Chưa có báo cáo tuần trong kỳ này.</p> }
+            } @else { <p class="hint">Báo cáo 3 · Toàn mạng lưới chưa được tổng hợp. Chờ đủ mẫu của bác sĩ và các thành viên khác.</p> }
+          </section>
+
+          @if (weeklyReportGroup !== 'members' && weeklyCaseReportSummary &&
+            (weeklyReportGroup !== 'all' || !canFollowReports || weeklyReportReadiness?.complete)) {
+            <section class="box">
+              <div class="box-head"><h2>Ca bệnh trong tuần</h2>
+                @if (canFollowReports) { <button type="button" class="link" (click)="exportWeeklyReport()">Xuất cùng báo cáo tuần</button> }
+              </div>
+              <p>{{ weeklyCaseReportSummary.hospitalInfections }} ca nhiễm khuẩn bệnh viện ·
+                {{ weeklyCaseReportSummary.transmissionDiseases }} ca bệnh truyền nhiễm/cách ly</p>
+              @if (weeklyCaseReportSummary.interventionStats.length) {
+                <h3>Phương án xử trí</h3>
+                <div class="scroll"><table>
+                  <thead><tr><th>Phương án</th><th>Số ca</th><th>Tỷ lệ (%)</th></tr></thead>
+                  <tbody>
+                    @for (item of weeklyCaseReportSummary.interventionStats; track item.value) {
+                      <tr><td>{{ interventionLabel(item.value) }}</td><td>{{ item.count }}</td><td>{{ rate(item.rate) }}</td></tr>
+                    }
+                  </tbody>
+                </table></div>
+              }
+              @if (weeklyCaseReportSummary.infectionTypes.length) {
+                <h3>Loại nhiễm khuẩn bệnh viện</h3>
+                <div class="scroll"><table>
+                  <thead><tr><th>Loại nhiễm khuẩn</th><th>Số ca</th><th>Tỷ lệ trong nhóm (%)</th></tr></thead>
+                  <tbody>
+                    @for (item of weeklyCaseReportSummary.infectionTypes; track item.type) {
+                      <tr><td>{{ infectionTypeLabel(item.type) }}</td><td>{{ item.count }}</td><td>{{ rate(item.rate) }}</td></tr>
+                    }
+                  </tbody>
+                </table></div>
+              }
+              @if (weeklyCaseReportSummary.transmissionByDisease.length) {
+                <div class="scroll"><table>
+                  <thead><tr><th>Bệnh</th><th>Tổng ca</th><th>Tỷ lệ trong nhóm</th><th>Nghi ngờ</th><th>%</th><th>Xác định</th><th>%</th>
+                    <th>Nhập viện</th><th>%</th><th>Ra viện</th><th>%</th><th>Chuyển viện</th><th>%</th><th>Tử vong</th><th>%</th></tr></thead>
+                  <tbody>
+                    @for (item of weeklyCaseReportSummary.transmissionByDisease; track item.disease) {
+                      <tr><td>{{ item.disease }}</td><td>{{ item.total }}</td><td>{{ rate(item.rate) }}</td>
+                        <td>{{ item.suspected }}</td><td>{{ rate(item.suspectedRate) }}</td>
+                        <td>{{ item.confirmed }}</td><td>{{ rate(item.confirmedRate) }}</td>
+                        <td>{{ item.admitted }}</td><td>{{ rate(item.admittedRate) }}</td>
+                        <td>{{ item.discharged }}</td><td>{{ rate(item.dischargedRate) }}</td>
+                        <td>{{ item.transferred }}</td><td>{{ rate(item.transferredRate) }}</td>
+                        <td>{{ item.deceased }}</td><td>{{ rate(item.deceasedRate) }}</td></tr>
+                    }
+                  </tbody>
+                </table></div>
+              }
+              @if (weeklyCaseReports.length) {
+                <h3>Chi tiết phiếu ca bệnh</h3>
+                <div class="scroll"><table>
+                  <thead><tr><th>Ngày</th><th>Bệnh/loại nhiễm khuẩn</th><th>Mã ca giả</th><th>Năm sinh · Giới tính</th>
+                    <th>Địa chỉ giả</th><th>Khởi phát · Nhập viện</th><th>Xét nghiệm · Diễn biến</th><th>Phương án xử trí</th></tr></thead>
+                  <tbody>
+                    @for (item of weeklyCaseReports; track item.id) {
+                      <tr><td>{{ date(item.date) }}</td>
+                        <td>{{ item.diagnosisName }}<small>{{ caseTypeLabel(item.type) }} · {{ item.type === 'hospital-infection' ? infectionTypeLabel(item.infectionType) : '' }}</small></td>
+                        <td>{{ item.patientName }}</td><td>{{ item.patientBirthYear || '—' }} · {{ item.patientGender || '—' }}</td>
+                        <td>{{ item.patientAddress }}</td><td>{{ date(item.onsetDate) }} · {{ date(item.admissionDate) }}</td>
+                        <td>{{ item.labResult }}<small>{{ caseOutcomeLabel(item.outcome) }}</small></td>
+                        <td>{{ interventionLabel(item.interventionNeeded) }}<small>{{ item.interventionDetails }}</small></td></tr>
+                    }
+                  </tbody>
+                </table></div>
+              }
+            </section>
+          }
+        }
+
+        @if (reportView === 'monthly') {
         @if (canRecord && overview.work.ownReportRequired) {
           <section class="box">
             <h2>Báo cáo tháng của tôi</h2>
-            <label class="inline">Tháng báo cáo <input type="month" [(ngModel)]="reportMonth" [max]="today.slice(0,7)" (change)="loadReportSummary()" /></label>
+            <label class="inline">Tháng báo cáo <input type="month" [(ngModel)]="reportMonth" [max]="today.slice(0,7)" (change)="reportMonthChanged()" /></label>
             @if (reportSummary) {
               <div class="tiles three">
                 <div><b>{{ reportSummary.monitoringCount }}</b><small>Lượt giám sát</small></div>
@@ -239,7 +507,9 @@
 
         @if (canFollowReports) { <section class="box">
           <h2>Tình hình nộp báo cáo tháng {{ monthLabel(overview.work.reportMonth) }}</h2>
-          <p><b>{{ overview.work.reportConfirmed }}/{{ overview.work.reportRequired }}</b> người đã xác nhận · Hạn {{ date(overview.work.reportDue) }}</p>
+          <p><b>{{ overview.work.reportConfirmed }}/{{ overview.work.reportRequired }}</b> người đã xác nhận
+            @if (reportSubmissionRate !== null) { · {{ reportSubmissionRate }}% hoàn thành }
+            · Hạn {{ date(overview.work.reportDue) }}</p>
           @if (overview.work.reportMissing.length) {
             <p [class.red-text]="reportLate">{{ reportLate ? 'Quá hạn, chưa xác nhận:' : 'Chưa xác nhận:' }}</p>
             <ul class="names" [class.red-text]="reportLate">
@@ -249,23 +519,163 @@
         </section> }
 
         <section class="box">
-          <div class="box-head"><h2>{{ canFollowReports ? 'Báo cáo đã xác nhận' : 'Báo cáo tôi đã xác nhận' }}</h2><button type="button" class="link" (click)="exportReport()">Tải bảng này</button></div>
+          <div class="box-head"><h2>{{ canFollowReports ? 'Báo cáo đã xác nhận' : 'Báo cáo tôi đã xác nhận' }}</h2>
+            <button type="button" class="link" (click)="exportReport()"
+              [disabled]="canFollowReports && reportGroup === 'all' && (!reportReadiness || !reportReadiness.complete)">Tải Excel</button></div>
           <ng-container *ngTemplateOutlet="periodPicker" />
+          @if (canFollowReports) {
+            <label class="inline">Nhóm báo cáo
+              <select [(ngModel)]="reportGroup" aria-label="Nhóm báo cáo">
+                <option value="all">Tất cả mạng lưới</option>
+                <option value="doctors">Bác sĩ</option>
+                <option value="members">Thành viên mạng lưới khác</option>
+              </select>
+            </label>
+            @if (reportReadiness) {
+              <p class="hint">Mẫu trong kỳ {{ monthLabel(reportReadiness.from) }} – {{ monthLabel(reportReadiness.to) }}:
+                bác sĩ {{ reportReadiness.doctors.submitted }}/{{ reportReadiness.doctors.required }}
+                @if (reportReadiness.doctors.rate !== null) { ({{ reportReadiness.doctors.rate }}%) };
+                thành viên mạng lưới khác {{ reportReadiness.members.submitted }}/{{ reportReadiness.members.required }}
+                @if (reportReadiness.members.rate !== null) { ({{ reportReadiness.members.rate }}%) }.
+                @if (!reportReadiness.complete) { Báo cáo tổng hợp toàn mạng lưới chỉ xuất được khi cả hai nhóm đã đủ mẫu. }
+                @else { Đã đủ mẫu để xuất báo cáo tổng hợp. }
+              </p>
+              @if (!reportReadiness.complete && reportReadiness.missing.length) {
+                <small class="red-text">Chưa nộp:
+                  @for (person of reportReadiness.missing.slice(0, 5); track person.month + person.fullName) {
+                    {{ person.fullName }} ({{ person.memberType }}, {{ monthLabel(person.month) }})@if (!$last) {; }
+                  }
+                  @if (reportReadiness.missing.length > 5) { và {{ reportReadiness.missing.length - 5 }} mẫu khác. }
+                </small>
+              }
+            }
+          }
           @if (filteredReports.length) {
             <div class="scroll">
               <table>
-                <thead><tr><th>Tháng</th><th>Người báo cáo</th><th>Giám sát</th><th>Vấn đề</th><th>Đã xử lý xong</th></tr></thead>
+                <thead><tr><th>Tháng</th><th>Người báo cáo</th><th>Giám sát</th><th>Vấn đề</th><th>Đã xử lý xong</th><th>Tỷ lệ xử lý</th></tr></thead>
                 <tbody>
                   @for (report of filteredReports; track report.id) {
-                    <tr><td>{{ monthLabel(report.month) }}</td><td>{{ report.submittedBy }}<small>{{ report.departmentName }}</small></td>
-                      <td>{{ report.monitoringCount }}</td><td>{{ report.risksFound }}</td><td>{{ report.risksClosed }}</td></tr>
+                    <tr><td>{{ monthLabel(report.month) }}</td>
+                      <td>{{ report.submittedBy }}<small>{{ report.memberType || 'Thành viên mạng lưới' }} · {{ report.departmentName }}</small></td>
+                      <td>{{ report.monitoringCount }}</td><td>{{ report.risksFound }}</td><td>{{ report.risksClosed }}</td>
+                      <td>{{ reportRate(report) }}</td></tr>
                   }
                 </tbody>
-                <tfoot><tr><td colspan="2">Tổng</td><td>{{ reportTotals.monitoringCount }}</td><td>{{ reportTotals.risksFound }}</td><td>{{ reportTotals.risksClosed }}</td></tr></tfoot>
+                <tfoot><tr><td colspan="2">Tổng</td><td>{{ reportTotals.monitoringCount }}</td><td>{{ reportTotals.risksFound }}</td>
+                  <td>{{ reportTotals.risksClosed }}</td><td>{{ rate(reportClosureRate) }}</td></tr></tfoot>
               </table>
             </div>
           } @else { <p class="muted">Chưa có báo cáo trong khoảng này.</p> }
+          @if (reportTopicSummary.length) {
+            <h3>Tổng hợp giám sát và vấn đề theo nội dung</h3>
+            <div class="scroll"><table>
+              <thead><tr><th>Nội dung</th><th>Lượt quan sát</th><th>Đạt</th><th>Thực hiện chưa đúng</th><th>Không VST</th><th>Tỷ lệ đúng</th>
+                <th>Vấn đề</th><th>Tỷ lệ trên tổng</th><th>Đã xử lý</th><th>Tỷ lệ xử lý</th></tr></thead>
+              <tbody>
+                @for (row of reportTopicSummary; track row.name) {
+                  <tr><td>{{ row.name }}</td><td>{{ row.total }}</td><td>{{ row.met }}</td>
+                    <td>{{ row.total - row.met - row.notPerformed }}</td><td>{{ row.notPerformed }}</td><td>{{ rate(row.rate) }}</td>
+                    <td>{{ row.issues }}</td><td>{{ rate(row.share) }}</td><td>{{ row.closed }}</td><td>{{ rate(row.closedRate) }}</td></tr>
+                }
+              </tbody>
+            </table></div>
+          }
+          @if (reportDepartmentSummary.length) {
+            <h3>Kết quả theo khoa/phòng</h3>
+            <div class="scroll"><table>
+              <thead><tr><th>Khoa/phòng</th><th>Nội dung</th><th>Lượt quan sát</th><th>Đạt</th><th>Thực hiện chưa đúng</th><th>Không VST</th><th>Tỷ lệ đúng</th></tr></thead>
+              <tbody>
+                @for (row of reportDepartmentSummary; track row.departmentCode + row.area) {
+                  <tr><td>{{ row.departmentName }}</td><td>{{ row.area }}</td><td>{{ row.total }}</td>
+                    <td>{{ row.met }}</td><td>{{ row.total - row.met - row.notPerformed }}</td>
+                    <td>{{ row.notPerformed }}</td><td>{{ rate(row.rate) }}</td></tr>
+                }
+              </tbody>
+            </table></div>
+          }
+          @if (reportRoleSummary.length) {
+            <h3>Kết quả theo đối tượng được giám sát</h3>
+            <div class="scroll"><table>
+              <thead><tr><th>Đối tượng</th><th>Nội dung</th><th>Lượt quan sát</th><th>Đạt</th><th>Thực hiện chưa đúng</th><th>Không VST</th><th>Tỷ lệ đúng</th></tr></thead>
+              <tbody>
+                @for (row of reportRoleSummary; track row.role + row.area) {
+                  <tr><td>{{ row.role }}</td><td>{{ row.area }}</td><td>{{ row.total }}</td>
+                    <td>{{ row.met }}</td><td>{{ row.total - row.met - row.notPerformed }}</td>
+                    <td>{{ row.notPerformed }}</td><td>{{ rate(row.rate) }}</td></tr>
+                }
+              </tbody>
+            </table></div>
+          }
         </section>
+
+        @if (reportGroup !== 'members' && canReadCaseReports) { <section class="box">
+          <div class="box-head">
+            <h2>Tổng hợp phiếu ca bệnh</h2>
+            <button type="button" class="link" (click)="exportCaseReports()" [disabled]="!caseReportSummary">Tải Excel ca bệnh</button>
+          </div>
+          <p class="hint">{{ date(caseReportFromDate) }} – {{ date(caseReportToDate) }} · Tỷ lệ tính trên tổng phiếu trong khoảng đã chọn.</p>
+          @if (caseReportSummary) {
+            <div class="tiles three">
+              <div><b>{{ caseReportSummary.total }}</b><small>Tổng phiếu bác sĩ</small></div>
+              <div><b>{{ caseReportSummary.hospitalInfections }}</b><small>Nhiễm khuẩn bệnh viện</small></div>
+              <div><b>{{ caseReportSummary.transmissionDiseases }}</b><small>Bệnh truyền nhiễm/cách ly</small></div>
+            </div>
+            <h3>Phương án xử trí</h3>
+            <div class="scroll"><table>
+              <thead><tr><th>Phương án</th><th>Số ca</th><th>Tỷ lệ</th></tr></thead>
+              <tbody>
+                @for (stat of caseReportSummary.interventionStats; track stat.value) {
+                  <tr><td>{{ interventionLabel(stat.value) }}</td><td>{{ stat.count }}</td><td>{{ rate(stat.rate) }}</td></tr>
+                }
+              </tbody>
+            </table></div>
+            @if (caseReportSummary.hospitalInfections) {
+              <h3>Phân loại nhiễm khuẩn bệnh viện</h3>
+              <div class="scroll"><table>
+                <thead><tr><th>Loại nhiễm khuẩn</th><th>Số ca</th><th>Tỷ lệ trong nhóm</th></tr></thead>
+                <tbody>
+                  @for (stat of caseReportSummary.infectionTypes; track stat.type) {
+                    <tr><td>{{ infectionTypeLabel(stat.type) }}</td><td>{{ stat.count }}</td><td>{{ rate(stat.rate) }}</td></tr>
+                  }
+                </tbody>
+              </table></div>
+            }
+            @if (caseReportSummary.transmissionDiseases) {
+              <h3>Tổng hợp bệnh truyền nhiễm theo tuần/kỳ</h3>
+              <div class="scroll"><table>
+                <thead><tr><th>Bệnh</th><th>Tổng ca</th><th>Nghi ngờ</th><th>%</th><th>Xác định</th><th>%</th><th>Nhập viện</th><th>%</th><th>Ra viện</th><th>%</th><th>Chuyển viện</th><th>%</th><th>Tử vong</th><th>%</th></tr></thead>
+                <tbody>
+                  @for (item of caseReportSummary.transmissionByDisease; track item.disease) {
+                    <tr><td>{{ item.disease }}</td><td>{{ item.total }}</td><td>{{ item.suspected }}</td><td>{{ rate(item.suspectedRate) }}</td>
+                      <td>{{ item.confirmed }}</td><td>{{ rate(item.confirmedRate) }}</td>
+                      <td>{{ item.admitted }}</td><td>{{ rate(item.admittedRate) }}</td>
+                      <td>{{ item.discharged }}</td><td>{{ rate(item.dischargedRate) }}</td>
+                      <td>{{ item.transferred }}</td><td>{{ rate(item.transferredRate) }}</td>
+                      <td>{{ item.deceased }}</td><td>{{ rate(item.deceasedRate) }}</td></tr>
+                  }
+                </tbody>
+              </table></div>
+            }
+            @if (caseReports.length) {
+              <div class="scroll"><table>
+                <thead><tr><th>Ngày</th><th>Loại phiếu</th><th>Bác sĩ · Khoa</th><th>Chẩn đoán</th><th>Phương án xử trí</th></tr></thead>
+                <tbody>
+                  @for (item of caseReports; track item.id) {
+                    <tr>
+                      <td>{{ date(item.date) }}</td>
+                      <td>{{ caseTypeLabel(item.type) }}<small>{{ item.type === 'hospital-infection' ? infectionTypeLabel(item.infectionType) : '' }}</small></td>
+                      <td>{{ item.doctor }}<small>{{ item.departmentName }}</small></td>
+                      <td>{{ item.diagnosisName }}<small>{{ item.patientName }}</small></td>
+                      <td>{{ interventionLabel(item.interventionNeeded) }}<small>{{ item.interventionDetails }}</small></td>
+                    </tr>
+                  }
+                </tbody>
+              </table></div>
+            } @else { <p class="muted">Chưa có phiếu ca bệnh trong khoảng này.</p> }
+          }
+        </section> }
+        }
       }
 
       <!-- QUẢN LÝ -->
@@ -277,7 +687,7 @@
         </nav>
         @if (manageView === 'members') { <section class="box">
           <div class="box-head">
-            <h2>Nhân viên mạng lưới <small>{{ activeMembers }} đang tham gia</small></h2>
+            <h2>Thành viên mạng lưới <small>{{ activeMembers }} đang tham gia</small></h2>
             @if (canManage) { <button type="button" class="btn small" (click)="openMember()">＋ Thêm</button> }
           </div>
           <input class="search" type="search" [(ngModel)]="search" placeholder="Tìm tên, mã nhân viên, khoa" aria-label="Tìm thành viên" />
@@ -326,7 +736,7 @@
             [attr.aria-pressed]="persona === option.value" (click)="persona !== option.value && switchPersona(option.value)">{{ option.label }}</button>
         }
       </div>
-      <span class="demo-note">Bản dùng thử · Không nhập thông tin người bệnh</span>
+      <span class="demo-note">Tài khoản: {{ demoRoleLabel }} · Demo chỉ dùng dữ liệu giả</span>
     </footer>
   }
 </div>
@@ -334,7 +744,7 @@
 <ng-template #periodPicker>
   <div class="chips">
     @for (option of periods; track option.value) {
-      <button type="button" [class.on]="period === option.value" (click)="setPeriod(option.value)">{{ section === 'reports' && option.value === 'month' ? 'Tháng ' + monthLabel(reportMonth) : option.label }}</button>
+      <button type="button" [class.on]="period === option.value" (click)="setPeriod(option.value)">{{ section === 'reports' && option.value === 'month' ? 'Tháng ' + monthLabel(reportMonth) : periodLabel(option.value, option.label) }}</button>
     }
   </div>
   @if (period === 'custom') {
@@ -353,22 +763,62 @@
 
       @if (modal === 'monitoring') {
         <form #f="ngForm" (ngSubmit)="f.valid && saveMonitoring()">
-          <p class="hint">Ví dụ: quan sát 10 lần rửa tay, 8 lần làm đúng → nhập 10 và 8.</p>
+          @if (isNurse) {
+            <p class="hint">Bảng kiểm giám sát vệ sinh tay, phòng hộ cá nhân và phân loại chất thải.</p>
+            <div class="row"><div><strong>Khoa/phòng được kiểm tra</strong><small>{{ user?.departmentName }}</small></div>
+              <span class="badge">ID giám sát: {{ user?.employeeCode }}</span></div>
+            <label>Đối tượng kiểm tra
+              <select name="observedRole" [(ngModel)]="monitoringForm.observedRole" required>
+                <option value="" disabled>Chọn đối tượng</option>
+                @for (role of observedRoles; track role) { <option [value]="role">{{ role }}</option> }
+              </select>
+            </label>
+            <label>Người bị giám sát <input name="observedPerson" [(ngModel)]="monitoringForm.observedPerson" maxlength="120" required /></label>
+            <label>Thời điểm quan sát <input name="observationMoment" [(ngModel)]="monitoringForm.observationMoment" maxlength="120" required
+              placeholder="Ví dụ: trước khi tiếp xúc người bệnh" /></label>
+          } @else { <p class="hint">Nhập tổng số lượt quan sát và số lượt làm đúng; hệ thống tự tính tỷ lệ.</p> }
           <label>Nội dung giám sát
-            <select name="area" [(ngModel)]="monitoringForm.area" required>
+          <select name="area" [(ngModel)]="monitoringForm.area" (ngModelChange)="monitoringAreaChanged($event)" required>
               <option value="" disabled>Chọn nội dung</option>
               @for (area of monitoringAreas; track area) { <option [value]="area">{{ area }}</option> }
             </select>
           </label>
-          <div class="two">
-            <label>Số lần quan sát <input name="size" type="number" min="1" step="1" [(ngModel)]="monitoringForm.sampleSize" required /></label>
-            <label>Số lần làm đúng <input name="ok" type="number" min="0" step="1" [max]="monitoringForm.sampleSize ?? 0" [(ngModel)]="monitoringForm.compliant" required /></label>
-          </div>
-          @if (monitoringForm.compliant !== null && monitoringForm.sampleSize !== null && monitoringForm.compliant > monitoringForm.sampleSize) { <p class="red-text" role="alert">Số lần làm đúng không được lớn hơn số lần quan sát.</p> }
-          @if (monitoringRate !== null) { <p class="rate">Tỷ lệ làm đúng: {{ monitoringRate }}%</p> }
+          @if (isNurse) {
+            <fieldset><legend>Kết quả kiểm tra</legend>
+              <div class="choices two">
+                <label class="choice" [class.on]="monitoringForm.practiceResult === 'Đạt'">
+                  <input type="radio" name="practiceResult" value="Đạt" [(ngModel)]="monitoringForm.practiceResult"
+                    (ngModelChange)="setPracticeResult($event)" required /><strong>Đạt</strong>
+                </label>
+                <label class="choice danger" [class.on]="monitoringForm.practiceResult === 'Chưa đạt'">
+                  <input type="radio" name="practiceResult" value="Chưa đạt" [(ngModel)]="monitoringForm.practiceResult"
+                    (ngModelChange)="setPracticeResult($event)" required /><strong>Thực hiện chưa đúng</strong>
+                </label>
+                @if (monitoringForm.area === 'Vệ sinh tay') {
+                  <label class="choice danger" [class.on]="monitoringForm.practiceResult === 'Không VST'">
+                    <input type="radio" name="practiceResult" value="Không VST" [(ngModel)]="monitoringForm.practiceResult"
+                      (ngModelChange)="setPracticeResult($event)" required /><strong>Không vệ sinh tay</strong>
+                  </label>
+                }
+              </div>
+            </fieldset>
+            @if (monitoringForm.area === 'Phân loại chất thải') {
+              <label>Loại chất thải được phân loại <input name="wasteType" [(ngModel)]="monitoringForm.wasteType" maxlength="120" required /></label>
+            }
+            @if (monitoringForm.area !== 'Phân loại chất thải') {
+              <label>Quy trình/kỹ thuật được quan sát <input name="procedure" [(ngModel)]="monitoringForm.procedure" maxlength="200" /></label>
+            }
+          } @else {
+            <div class="two">
+              <label>Số lần quan sát <input name="size" type="number" min="1" step="1" [(ngModel)]="monitoringForm.sampleSize" required /></label>
+              <label>Số lần làm đúng <input name="ok" type="number" min="0" step="1" [max]="monitoringForm.sampleSize ?? 0" [(ngModel)]="monitoringForm.compliant" required /></label>
+            </div>
+            @if (monitoringForm.compliant !== null && monitoringForm.sampleSize !== null && monitoringForm.compliant > monitoringForm.sampleSize) { <p class="red-text" role="alert">Số lần làm đúng không được lớn hơn số lần quan sát.</p> }
+            @if (monitoringRate !== null) { <p class="rate">Tỷ lệ làm đúng: {{ monitoringRate }}%</p> }
+          }
           @if (needsFindings) {
-            <label>Chưa đúng ở điểm nào? <textarea name="findings" rows="2" [(ngModel)]="monitoringForm.findings" required
-              placeholder="Ví dụ: không rửa tay trước khi tiếp xúc người bệnh"></textarea></label>
+            <label>Điểm chưa đạt/cần cải thiện <textarea name="findings" rows="2" maxlength="4000" [(ngModel)]="monitoringForm.findings" required
+              placeholder="Mô tả ngắn gọn điều chưa đúng"></textarea></label>
           }
           <label>Ngày <input name="date" type="date" [max]="today" [(ngModel)]="monitoringForm.date" required /></label>
           <ng-container *ngTemplateOutlet="actions; context: { valid: f.valid, label: 'Lưu giám sát' }" />
@@ -467,6 +917,148 @@
           <ng-container *ngTemplateOutlet="actions; context: { valid: f.valid, label: 'Thêm' }" />
         </form>
       }
+
+      @if (modal === 'infection-report') {
+        <form #f="ngForm" (ngSubmit)="f.valid && saveInfectionReport()">
+          <p class="hint">Người lập: {{ user?.fullName }} · {{ user?.position }} · {{ user?.departmentName }} (tự điền theo tài khoản)</p>
+          <div class="two">
+            <label>Ngày phát hiện <input name="date" type="date" [max]="today" [(ngModel)]="infectionForm.date" required /></label>
+            <label>Loại nhiễm khuẩn
+              <select name="infectionType" [(ngModel)]="infectionForm.infectionType" required>
+                <option value="">-- Chọn --</option>
+                <option value="urinary">Tiết niệu</option>
+                <option value="respiratory">Thở máy</option>
+                <option value="bloodstream">Huyết</option>
+                <option value="surgical-wound">Vết mổ</option>
+              </select>
+            </label>
+          </div>
+          <p class="hint">Biểu mẫu demo: chỉ nhập dữ liệu giả, không nhập thông tin người bệnh thật.</p>
+          <label>Mã ca/tên giả <input name="patient" [(ngModel)]="infectionForm.patientName" maxlength="120" /></label>
+          <div class="two">
+            <label>Năm sinh <input name="birthYear" type="number" min="1900" [max]="today.slice(0,4)"
+              [(ngModel)]="infectionForm.patientBirthYear" /></label>
+            <label>Giới tính
+              <select name="gender" [(ngModel)]="infectionForm.patientGender">
+                <option value="">Chưa rõ</option><option value="Nam">Nam</option><option value="Nữ">Nữ</option>
+                <option value="Khác/không rõ">Khác/không rõ</option>
+              </select>
+            </label>
+          </div>
+          <label>Địa chỉ (dữ liệu giả) <input name="address" [(ngModel)]="infectionForm.patientAddress" maxlength="200" /></label>
+          <label>Mã chẩn đoán <input name="diagCode" [(ngModel)]="infectionForm.diagnosisCode" maxlength="40" /></label>
+          <label>Chẩn đoán <input name="diag" [(ngModel)]="infectionForm.diagnosisName" maxlength="200" required /></label>
+          <div class="two">
+            <label>Ngày phát bệnh <input name="onsetDate" type="date" [max]="infectionForm.date" [(ngModel)]="infectionForm.onsetDate" /></label>
+            <label>Ngày nhập viện <input name="admissionDate" type="date" [max]="today" [(ngModel)]="infectionForm.admissionDate" /></label>
+          </div>
+          <fieldset><legend>Phương án xử trí ca bệnh</legend>
+            <div class="choices">
+              <label class="choice" [class.on]="infectionForm.interventionNeeded === 'no'">
+                <input type="radio" name="intervention" value="no" [(ngModel)]="infectionForm.interventionNeeded" required />
+                <strong>Chưa cần can thiệp</strong>
+              </label>
+              <label class="choice" [class.on]="infectionForm.interventionNeeded === 'dept'">
+                <input type="radio" name="intervention" value="dept" [(ngModel)]="infectionForm.interventionNeeded" required />
+                <strong>Can thiệp trong khoa</strong>
+              </label>
+              <label class="choice" [class.on]="infectionForm.interventionNeeded === 'ksnk'">
+                <input type="radio" name="intervention" value="ksnk" [(ngModel)]="infectionForm.interventionNeeded" required />
+                <strong>Phối hợp KSNK</strong>
+              </label>
+              <label class="choice" [class.on]="infectionForm.interventionNeeded === 'hospital'">
+                <input type="radio" name="intervention" value="hospital" [(ngModel)]="infectionForm.interventionNeeded" required />
+                <strong>Phối hợp toàn viện</strong>
+              </label>
+            </div>
+          </fieldset>
+          @if (infectionForm.interventionNeeded && infectionForm.interventionNeeded !== 'no') {
+            <label>Chi tiết xử trí <textarea name="details" rows="2" maxlength="2000" [(ngModel)]="infectionForm.interventionDetails" required
+              placeholder="Mô tả ngắn gọn việc cần làm"></textarea></label>
+          }
+          <ng-container *ngTemplateOutlet="actions; context: { valid: f.valid, label: 'Lưu báo cáo' }" />
+        </form>
+      }
+
+      @if (modal === 'transmission-report') {
+        <form #f="ngForm" (ngSubmit)="f.valid && saveTransmissionReport()">
+          <p class="hint">Người lập: {{ user?.fullName }} · {{ user?.position }} · {{ user?.departmentName }} (tự điền theo tài khoản)</p>
+          <p class="hint">Biểu mẫu demo: chỉ nhập dữ liệu giả, không nhập thông tin người bệnh thật.</p>
+          <div class="two">
+            <label>Ngày phát hiện <input name="date" type="date" [max]="today" [(ngModel)]="transmissionForm.date" required /></label>
+          </div>
+          <label>Mã ca/tên giả <input name="patient" [(ngModel)]="transmissionForm.patientName" maxlength="120" /></label>
+          <div class="two">
+            <label>Năm sinh <input name="birthYear" type="number" min="1900" [max]="today.slice(0,4)"
+              [(ngModel)]="transmissionForm.patientBirthYear" /></label>
+            <label>Giới tính
+              <select name="gender" [(ngModel)]="transmissionForm.patientGender">
+                <option value="">Chưa rõ</option><option value="Nam">Nam</option><option value="Nữ">Nữ</option>
+                <option value="Khác/không rõ">Khác/không rõ</option>
+              </select>
+            </label>
+          </div>
+          <label>Địa chỉ (dữ liệu giả) <input name="address" [(ngModel)]="transmissionForm.patientAddress" maxlength="200" /></label>
+          <label>Bệnh truyền nhiễm <input name="disease" [(ngModel)]="transmissionForm.diagnosisName" maxlength="200" required /></label>
+          <div class="two">
+            <label>Phân loại ca bệnh
+              <select name="classification" [(ngModel)]="transmissionForm.caseClassification" required>
+                <option value="" disabled>Chọn loại ca</option>
+                <option value="suspected">Ca nghi ngờ</option>
+                <option value="confirmed">Ca xác định</option>
+              </select>
+            </label>
+            <label>Tình trạng hiện tại
+              <select name="outcome" [(ngModel)]="transmissionForm.outcome" required>
+                <option value="" disabled>Chọn tình trạng</option>
+                <option value="ongoing">Đang điều trị/theo dõi</option>
+                <option value="admitted">Nhập viện</option>
+                <option value="discharged">Ra viện</option>
+                <option value="transferred">Chuyển viện</option>
+                <option value="deceased">Tử vong</option>
+              </select>
+            </label>
+          </div>
+          <div class="two">
+            <label>Ngày khởi phát <input name="onsetDate" type="date" [max]="transmissionForm.date" [(ngModel)]="transmissionForm.onsetDate" /></label>
+            <label>Ngày nhập viện <input name="admissionDate" type="date" [max]="today" [(ngModel)]="transmissionForm.admissionDate" /></label>
+          </div>
+          <div class="two">
+            <label>Ngày bắt đầu cách ly <input name="isolationStart" type="date" [max]="today" [(ngModel)]="transmissionForm.isolationStartDate" /></label>
+            <label>Ngày kết thúc cách ly <input name="isolationEnd" type="date" [min]="transmissionForm.isolationStartDate || undefined" [(ngModel)]="transmissionForm.isolationEndDate" /></label>
+          </div>
+          <label>Các biện pháp phòng ngừa <textarea name="measures" rows="2" [(ngModel)]="transmissionForm.preventiveMeasures"
+            placeholder="Các biện pháp phòng ngừa đã áp dụng"></textarea></label>
+          <label>Kết quả xét nghiệm (nếu có) <input name="labResult" [(ngModel)]="transmissionForm.labResult" maxlength="1000" /></label>
+          <label>Ghi chú diễn biến <textarea name="caseNote" rows="2" [(ngModel)]="transmissionForm.caseNote" maxlength="2000"></textarea></label>
+          <fieldset><legend>Phương án xử trí ca bệnh</legend>
+            <div class="choices">
+              <label class="choice" [class.on]="transmissionForm.interventionNeeded === 'no'">
+                <input type="radio" name="intervention" value="no" [(ngModel)]="transmissionForm.interventionNeeded" required />
+                <strong>Chưa cần can thiệp</strong>
+              </label>
+              <label class="choice" [class.on]="transmissionForm.interventionNeeded === 'dept'">
+                <input type="radio" name="intervention" value="dept" [(ngModel)]="transmissionForm.interventionNeeded" required />
+                <strong>Can thiệp trong khoa</strong>
+              </label>
+              <label class="choice" [class.on]="transmissionForm.interventionNeeded === 'ksnk'">
+                <input type="radio" name="intervention" value="ksnk" [(ngModel)]="transmissionForm.interventionNeeded" required />
+                <strong>Phối hợp KSNK</strong>
+              </label>
+              <label class="choice" [class.on]="transmissionForm.interventionNeeded === 'hospital'">
+                <input type="radio" name="intervention" value="hospital" [(ngModel)]="transmissionForm.interventionNeeded" required />
+                <strong>Phối hợp toàn viện</strong>
+              </label>
+            </div>
+          </fieldset>
+          @if (transmissionForm.interventionNeeded && transmissionForm.interventionNeeded !== 'no') {
+            <label>Chi tiết xử trí <textarea name="details" rows="2" maxlength="2000" [(ngModel)]="transmissionForm.interventionDetails" required
+              placeholder="Mô tả ngắn gọn việc cần làm"></textarea></label>
+          }
+          <ng-container *ngTemplateOutlet="actions; context: { valid: f.valid, label: 'Lưu báo cáo' }" />
+        </form>
+      }
+
     </dialog>
 }
 

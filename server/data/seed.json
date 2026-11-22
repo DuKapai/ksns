@@ -92,7 +92,7 @@
       "departmentCode": "DEMO-A",
       "departmentName": "Khoa A (mô phỏng)",
       "memberType": "Bác sĩ",
-      "networkTitle": "Nhân viên mạng lưới",
+      "networkTitle": "Thành viên mạng lưới",
       "active": true
     },
     {
@@ -103,7 +103,7 @@
       "departmentCode": "DEMO-A",
       "departmentName": "Khoa A (mô phỏng)",
       "memberType": "Điều dưỡng",
-      "networkTitle": "Nhân viên mạng lưới",
+      "networkTitle": "Thành viên mạng lưới",
       "active": true
     },
     {

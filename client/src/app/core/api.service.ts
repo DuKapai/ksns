@@ -16,7 +16,7 @@ export class ApiService {
   get user(): User | null { try { return JSON.parse(localStorage.getItem('ksnk_user') || 'null') as User | null; } catch { return null; } }
   headers(): HttpHeaders { return new HttpHeaders({ Authorization: `Bearer ${this.token}` }); }
   logout(): void { localStorage.removeItem('ksnk_token'); localStorage.removeItem('ksnk_user'); localStorage.removeItem('ksnk_portal'); localStorage.removeItem('ksnk_demo'); }
-  demoSession(persona = 'doctor'): Observable<{ token: string; user: User; demo: boolean }> {
+  demoSession(persona = 'member'): Observable<{ token: string; user: User; demo: boolean }> {
     return this.http.post<{ token: string; user: User; demo: boolean }>(`${this.base}/auth/demo-session`, { persona }).pipe(tap(result => {
       localStorage.setItem('ksnk_token', result.token);
       localStorage.setItem('ksnk_user', JSON.stringify(result.user));

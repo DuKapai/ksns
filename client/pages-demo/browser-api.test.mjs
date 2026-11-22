@@ -62,6 +62,10 @@ test("browser API persists demo workflows and enforces demo roles", async () => 
 });
 
 test("Pages opens the simple module without login and persists the three-role workflow", async () => {
+  const memberSession = await request("POST", "/auth/demo-session", { persona: "member" });
+  assert.equal(memberSession.status, 200);
+  assert.equal(memberSession.body.user.employeeCode, "DEMO-DD-001");
+  assert.ok(memberSession.body.user.roles.includes("MEMBER_NURSE"));
   const tokens = {};
   for (const persona of ["doctor", "staff", "ksnk"]) {
     const session = await request("POST", "/auth/demo-session", { persona });

@@ -87,3 +87,23 @@ test('rejects a hospital account that has no approved KSNK role mapping', async 
     (error) => error.code === 'ROLE_ASSIGNMENT_MISSING',
   );
 });
+
+test('allows an explicitly assigned non-doctor network member to use member workflows', async () => {
+  process.env.HIS_API_BASE_URL = 'https://hospital.example';
+  process.env.HIS_AUTH_PROTOCOL = 'employee-cookie-api';
+  for (const key of settings.slice(3)) delete process.env[key];
+
+  const user = await loginWithHospitalApi('EMP003', 'test-password', {
+    assignments: { EMP003: { roles: ['NETWORK_MEMBER'] } },
+    fetchImpl: async () => new Response(JSON.stringify({
+      manv: 'EMP003',
+      tennv: 'Kỹ thuật viên mô phỏng',
+      makhoa: 'DEMO-A',
+      tenkhoa: 'Khoa A (mô phỏng)',
+      tencv: 'Kỹ thuật y',
+    }), { status: 200, headers: { 'content-type': 'application/json' } }),
+  });
+
+  assert.deepEqual(user.roles, ['NETWORK_MEMBER']);
+  assert.equal(user.position, 'Kỹ thuật y');
+});

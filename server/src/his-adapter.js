@@ -13,6 +13,7 @@ function getPath(object, dottedPath) {
 const ALLOWED_ROLES = new Set([
   'MEMBER_DOCTOR',
   'MEMBER_NURSE',
+  'NETWORK_MEMBER',
   'DEPARTMENT_HEAD',
   'KSNK_ADMIN',
   'NETWORK_LEAD',

@@ -18,11 +18,17 @@ import {
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
-const allowedOrigin = process.env.CLIENT_ORIGIN || "http://localhost:4200";
+const configuredOrigins = process.env.CLIENT_ORIGIN
+  ? process.env.CLIENT_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean)
+  : ["http://localhost:4200"];
+const localOrigins = process.env.NODE_ENV === "production"
+  ? []
+  : ["http://127.0.0.1:4200"];
+const allowedOrigins = [...new Set([...configuredOrigins, ...localOrigins])];
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
-app.use(cors({ origin: allowedOrigin, credentials: false }));
+app.use(cors({ origin: allowedOrigins, credentials: false }));
 app.use(express.json({ limit: "1mb" }));
 
 // =====================================================
@@ -129,7 +135,7 @@ app.post("/api/auth/login", async (req, res) => {
     }
 
     const portalRoles = {
-      member: ["MEMBER_DOCTOR", "MEMBER_NURSE"],
+      member: ["MEMBER_DOCTOR", "MEMBER_NURSE", "NETWORK_MEMBER", "DEPARTMENT_HEAD"],
       head: ["DEPARTMENT_HEAD"],
       ksnk: [
         "KSNK_ADMIN",
@@ -181,8 +187,14 @@ app.post("/api/auth/demo-session", asyncRoute(async (req, res) => {
   if (process.env.DEMO_AUTO_LOGIN !== "true" || process.env.NODE_ENV === "production") {
     return res.status(403).json({ message: "Chưa có phiên MyHV. Bản dùng thử cần bật DEMO_AUTO_LOGIN=true ở máy chủ." });
   }
-  const accounts = { doctor: "DEMO-BS-001", staff: "DEMO-NV-001", ksnk: "DEMO-KSNK-001" };
-  const persona = req.body?.persona || "doctor";
+  const accounts = {
+    doctor: "DEMO-BS-001",
+    member: "DEMO-DD-001",
+    nurse: "DEMO-DD-001",
+    staff: "DEMO-NV-001",
+    ksnk: "DEMO-KSNK-001",
+  };
+  const persona = req.body?.persona || "member";
   if (!Object.hasOwn(accounts, persona)) return res.status(400).json({ message: "Tài khoản mẫu không hợp lệ." });
   const data = await readStore();
   const user = data.users.find((item) => item.active && item.employeeCode === accounts[persona] &&
@@ -335,6 +347,19 @@ app.post(
         message: "Cỡ mẫu và số đạt phải là số nguyên không âm; số đạt không được vượt cỡ mẫu.",
       });
     }
+    if (req.user.roles?.includes("MEMBER_NURSE")) {
+      const topics = ["Vệ sinh tay", "Sử dụng phòng hộ cá nhân", "Phân loại chất thải"];
+      const observedRoles = ["Bác sỹ", "Điều dưỡng", "KTV", "Nữ hộ sinh", "Hộ lý"];
+      const result = body.practiceResult;
+      if (!topics.includes(body.area) || !observedRoles.includes(body.observedRole) ||
+          typeof body.observedPerson !== "string" || !body.observedPerson.trim() ||
+          typeof body.observationMoment !== "string" || !body.observationMoment.trim() ||
+          !(["Đạt", "Chưa đạt"].includes(result) || body.area === "Vệ sinh tay" && result === "Không VST") || sampleSize !== 1 ||
+          compliant !== (result === "Đạt" ? 1 : 0) ||
+          (body.area === "Phân loại chất thải" && (typeof body.wasteType !== "string" || !body.wasteType.trim()))) {
+        return res.status(400).json({ message: "Phiếu giám sát điều dưỡng cần đủ khoa, đối tượng, người được quan sát, thời điểm và kết quả." });
+      }
+    }
     if (compliant < sampleSize && !body.findings?.trim()) {
       return res.status(400).json({ message: "Ghi điểm chưa đạt khi có lượt làm chưa đúng." });
     }
@@ -357,11 +382,14 @@ app.post(
         observer: req.user.fullName,
         observerEmployeeCode: req.user.employeeCode || "",
         observerRole: req.user.roles?.includes("MEMBER_NURSE") ? "MEMBER_NURSE" :
-          req.user.roles?.includes("MEMBER_DOCTOR") ? "MEMBER_DOCTOR" : "KSNK",
+          req.user.roles?.includes("MEMBER_DOCTOR") ? "MEMBER_DOCTOR" :
+            req.user.roles?.includes("NETWORK_MEMBER") ? "NETWORK_MEMBER" :
+              req.user.roles?.includes("DEPARTMENT_HEAD") ? "DEPARTMENT_HEAD" : "KSNK",
         method: body.method || "Quan sát trực tiếp",
 
         sampleSize,
         compliant,
+        notPerformed: body.practiceResult === "Không VST" ? 1 : 0,
 
         findings: body.findings?.trim() || "Tất cả lượt kiểm tra đều đạt",
         evidence: body.evidence || "",
@@ -687,12 +715,18 @@ app.patch("/api/risks/:id", currentUser, requireNetworkReader, async (req, res) 
 
 app.get("/api/reports", currentUser, requireNetworkReader, async (req, res) => {
   const data = await readStore();
+  const memberType = (item) => item.memberType || data.members.find((member) =>
+    member.employeeCode === item.employeeCode && member.departmentCode === item.departmentCode)?.memberType || "";
+  const monthlyReports = data.monthlyReports.map((item) => ({
+    ...item, memberType: memberType(item), source: memberType(item) === "Bác sĩ" ? "doctor" : "member",
+  }));
+  const doctorReports = (data.doctorReports || []).map((item) => ({
+    ...item, monitoringCount: item.summary.monitoringCount, risksFound: item.summary.riskCount,
+    risksClosed: item.summary.closedRiskCount, source: "doctor", memberType: "Bác sĩ",
+  }));
 
   res.json({
-    items: [...data.monthlyReports, ...(data.doctorReports || []).map((item) => ({
-      ...item, monitoringCount: item.summary.monitoringCount, risksFound: item.summary.riskCount,
-      risksClosed: item.summary.closedRiskCount, source: "doctor",
-    }))]
+    items: [...monthlyReports, ...doctorReports]
       .filter((x) =>
         sameDepartmentOrAdmin(req, x.departmentCode),
       )
@@ -712,6 +746,8 @@ app.post(
     }
     const item = await updateStore((data) => {
       const summary = monthlySummary(data, req.user, body.month);
+      const memberType = data.members.find((member) => member.active && member.employeeCode === req.user.employeeCode &&
+        member.departmentCode === req.user.departmentCode)?.memberType || "";
       const existing = data.monthlyReports.find((report) => report.month === body.month &&
         report.employeeCode === req.user.employeeCode && report.departmentCode === req.user.departmentCode);
       const record = {
@@ -731,6 +767,7 @@ app.post(
         risksClosed: summary.risksClosed,
         summary,
         employeeCode: req.user.employeeCode,
+        memberType,
 
         incidents: body.incidents || "",
         recommendations: body.recommendations || "",
@@ -840,7 +877,7 @@ app.post(
         memberType: body.memberType,
 
         networkTitle:
-          body.networkTitle || "Nhân viên mạng lưới",
+          body.networkTitle || "Thành viên mạng lưới",
 
         active: true,
       };
@@ -850,7 +887,7 @@ app.post(
       audit(
         data,
         req.user,
-        "Thêm nhân viên mạng lưới",
+        "Thêm thành viên mạng lưới",
         "member",
         member.id,
       );
