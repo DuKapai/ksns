@@ -17,6 +17,8 @@ const colleague = { ...nurse, id: "colleague", username: "colleague", employeeCo
   fullName: "Colleague", departmentCode: "A", departmentName: "Ward A" };
 const genericMember = { ...member, id: "generic-member", username: "generic-member", employeeCode: "TECH-001",
   fullName: "Technician demo", position: "Kỹ thuật viên", roles: ["NETWORK_MEMBER"] };
+const departmentHead = { ...member, id: "department-head", username: "department-head", employeeCode: "HEAD-001",
+  fullName: "Department head", roles: ["DEPARTMENT_HEAD"] };
 const staff = { ...member, id: "staff", username: "staff", employeeCode: "DEMO-NV-001", fullName: "Staff demo", roles: ["STAFF"] };
 const other = { ...staff, id: "other", username: "other", employeeCode: "OTHER" };
 const admin = { ...member, id: "ksnk", username: "ksnk", employeeCode: "DEMO-KSNK-001", fullName: "KSNK demo",
@@ -65,7 +67,7 @@ test("period totals use scoped records, correct denominators and null for no sam
 test("simplified module persists notices, restricts responses and automatically confirms reports", async (t) => {
   const file = path.join(serverDir, "test", `module-${randomUUID()}.json`);
   await writeFile(file, JSON.stringify({
-    users: [member, nurse, colleague, genericMember, staff, other, admin,
+    users: [member, nurse, colleague, genericMember, departmentHead, staff, other, admin,
       { ...admin, id: "secretary", username: "secretary", roles: ["NETWORK_SECRETARY"] }],
     members: [{ ...member, memberType: "Bác sĩ" }, { ...nurse, memberType: "Điều dưỡng" }, { ...admin, memberType: "KSNK" },
       { ...colleague, memberType: "Điều dưỡng", active: true }, { ...genericMember, memberType: "Kỹ thuật y", active: true }],
@@ -130,6 +132,9 @@ test("simplified module persists notices, restricts responses and automatically 
   assert.equal(genericTokenResponse.status, 200);
   const genericToken = genericTokenResponse.body.token;
   assert.equal((await request("/module/context", genericToken)).body.canRecord, true);
+  const departmentHeadToken = (await request("/auth/login", null, {
+    username: departmentHead.username, password: "test",
+  })).body.token;
   const employee = (await request("/auth/demo-session", null, { persona: "staff" })).body.token;
   const unrelated = (await request("/auth/login", null, { username: "other", password: "test" })).body.token;
   assert.equal((await request("/module/context")).status, 401);
@@ -192,6 +197,7 @@ test("simplified module persists notices, restricts responses and automatically 
   assert.equal(incompleteReadiness.body.complete, false);
   assert.equal(incompleteReadiness.body.doctors.submitted, 1);
   assert.equal(incompleteReadiness.body.members.submitted, 0);
+  assert.ok(incompleteReadiness.body.departments.some((department) => department.departmentCode === "A"));
   assert.equal((await request(`/module/report-readiness?from=${month}&to=${month}`, doctor)).status, 403);
   assert.equal((await request("/module/report-readiness?from=2024-13&to=2025-01", ksnk)).status, 400);
   await request("/reports", doctor, { month });
@@ -284,6 +290,70 @@ test("simplified module persists notices, restricts responses and automatically 
   assert.equal(caseSummary.transmissionByDisease[0].suspectedRate, 100);
   assert.equal(caseSummary.transmissionByDisease[0].admittedRate, 100);
   assert.equal((await request("/module/case-reports?from=2024-02-30&to=2024-03-01", doctor)).status, 400);
+  assert.equal((await request("/doctor/observations", doctor, {
+    date: vietnamDate(), period: "Hằng tuần", topic: "01 · Rà soát nhiễm khuẩn bệnh viện",
+    method: "Rà soát hồ sơ", location: "Ward A", sampleSize: 2,
+    criteria: [{ label: "Tiêu chí đạt", result: "Đạt" },
+      { label: "Tiêu chí chưa đạt", result: "Chưa đạt", evidence: "Thiếu minh chứng" }],
+  })).status, 201);
+  assert.equal((await request("/surveillance/daily", doctor, {
+    date: vietnamDate(), bundles: {
+      VAP: { eligible: 4, compliant: 3 }, CAUTI: { eligible: 0, compliant: 0 },
+      SSI: { eligible: 0, compliant: 0 }, CLABSI: { eligible: 0, compliant: 0 },
+    },
+  }, "PUT")).status, 200);
+  assert.equal((await request("/surveillance/cases", nurseToken, {
+    detectedAt: `${vietnamDate()}T10:00:00+07:00`, type: "Nghi ngờ NKBV", location: "Ward A",
+    findings: "Dấu hiệu cần đánh giá", initialAction: "Áp dụng phòng ngừa chuẩn",
+    isolationStatus: "Đang bố trí", isolationType: "Tiếp xúc",
+  })).status, 201);
+  assert.equal((await request("/module/aggregate-report", nurseToken, {
+    from: `${month}-01`, to: vietnamDate(), group: "all", issueStatus: "all", types: ["monitorings"],
+  })).status, 403);
+  assert.equal((await request("/module/aggregate-report", doctor, {
+    from: `${month}-01`, to: vietnamDate(), group: "all", issueStatus: "all", types: ["caseReports"],
+  })).status, 403);
+  assert.equal((await request("/module/aggregate-report", ksnk, {
+    from: `${month}-01`, to: vietnamDate(), group: "all", issueStatus: "all", types: ["not-a-report"],
+  })).status, 400);
+  const aggregate = await request("/module/aggregate-report", ksnk, {
+    from: `${month}-01`, to: vietnamDate(), group: "all", departmentCode: "A", issueStatus: "all",
+    types: ["monitorings", "doctorObservations", "dailySurveillance", "surveillanceCases", "risks",
+      "caseReports", "weeklyReports", "monthlyReports"],
+    includeDetails: true,
+  });
+  assert.equal(aggregate.status, 200);
+  assert.ok(aggregate.body.counts.monitorings >= 3);
+  assert.equal(aggregate.body.counts.doctorObservations, 1);
+  assert.equal(aggregate.body.counts.dailySurveillance, 1);
+  assert.equal(aggregate.body.counts.surveillanceCases, 1);
+  assert.equal(aggregate.body.counts.caseReports, 2);
+  const doctorObservationSheet = aggregate.body.sheets.find((sheet) => sheet.name === "Giám sát bác sĩ");
+  assert.equal(doctorObservationSheet.rows[1][4], 1);
+  assert.equal(doctorObservationSheet.rows[1][5], 1);
+  assert.equal(doctorObservationSheet.rows[1][8], 50);
+  const bundleSheet = aggregate.body.sheets.find((sheet) => sheet.name === "Gói phòng ngừa hằng ngày");
+  assert.equal(bundleSheet.rows.find((row) => row[1] === "Viêm phổi liên quan thở máy")[6], 75);
+  const caseDetailSheet = aggregate.body.sheets.find((sheet) => sheet.name === "Chi tiết ca bệnh");
+  assert.ok(!caseDetailSheet.rows.flat().includes("Demo patient"));
+  const closedOnly = await request("/module/aggregate-report", ksnk, {
+    from: `${month}-01`, to: vietnamDate(), group: "all", departmentCode: "A", issueStatus: "closed",
+    types: ["risks"], includeDetails: false,
+  });
+  assert.equal(closedOnly.body.counts.risks, 0);
+  const departmentHeadAggregate = await request("/module/aggregate-report", departmentHeadToken, {
+    from: `${month}-01`, to: vietnamDate(), group: "all", issueStatus: "all", types: ["monitorings"],
+  });
+  assert.equal(departmentHeadAggregate.body.departmentCode, "A");
+  assert.equal((await request("/module/aggregate-report", departmentHeadToken, {
+    from: `${month}-01`, to: vietnamDate(), group: "all", departmentCode: "B", issueStatus: "all",
+    types: ["monitorings"],
+  })).status, 403);
+  assert.equal((await request(`/module/case-reports?from=${month}-01&to=${vietnamDate()}`, departmentHeadToken)).status, 403);
+  assert.equal((await request("/module/aggregate-report", ksnk, {
+    from: `${month}-01`, to: vietnamDate(), group: "all", departmentCode: "UNKNOWN", issueStatus: "all",
+    types: ["risks"],
+  })).status, 400);
   const stored = JSON.parse(await readFile(file, "utf8"));
   assert.equal(stored.monthlyReports.length, 4);
   assert.equal(stored.monthlyReports.find((item) => item.employeeCode === member.employeeCode).versions.length, 1);

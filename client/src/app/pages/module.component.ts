@@ -84,6 +84,16 @@ interface ReportReadiness {
   from: string; to: string; required: number; submitted: number; rate: number | null; complete: boolean;
   doctors: ReportReadinessGroup; members: ReportReadinessGroup;
   missing: { month: string; fullName: string; departmentName: string; memberType: string }[];
+  departments: { departmentCode: string; departmentName: string }[];
+}
+interface AggregateReportSheet {
+  name: string;
+  rows: (string | number)[][];
+  recordCount: number;
+}
+interface AggregateReport {
+  from: string; to: string; group: string; departmentCode: string; issueStatus: string;
+  types: string[]; counts: Record<string, number>; sheets: AggregateReportSheet[];
 }
 interface WeeklyReport {
   id: string; from: string; to: string; activities: string; difficulties: string; nextWeekPlan: string; recommendations: string;
@@ -164,7 +174,25 @@ export class ModuleComponent implements OnInit, OnDestroy {
   caseReports: CaseReport[] = [];
   caseReportSummary: CaseReportSummary | null = null;
   reportGroup = 'all';
-  reportView: 'weekly' | 'monthly' = 'weekly';
+  reportView: 'weekly' | 'monthly' | 'custom' = 'weekly';
+  customFrom = `${this.today.slice(0, 7)}-01`;
+  customTo = this.today;
+  customDepartmentCode = '';
+  customGroup = 'all';
+  customIssueStatus = 'all';
+  includeExportDetails = true;
+  aggregateReport: AggregateReport | null = null;
+  aggregateReportLoading = false;
+  readonly exportReportTypes = [
+    { value: 'monitorings', label: 'Bảng kiểm thành viên: vệ sinh tay, PPE, chất thải', selected: true },
+    { value: 'doctorObservations', label: 'Giám sát chuyên môn bác sĩ (BM-BS01)', selected: true },
+    { value: 'dailySurveillance', label: 'Gói phòng ngừa hằng ngày: VAP, CAUTI, SSI, CLABSI', selected: true },
+    { value: 'surveillanceCases', label: 'Ca nghi ngờ nhiễm khuẩn và cách ly', selected: true },
+    { value: 'risks', label: 'Nguy cơ, vấn đề và khắc phục', selected: true },
+    { value: 'caseReports', label: 'Ca bệnh bác sĩ: NKBV và truyền nhiễm/cách ly', selected: true },
+    { value: 'weeklyReports', label: 'Báo cáo tuần', selected: true },
+    { value: 'monthlyReports', label: 'Báo cáo tháng', selected: true },
+  ];
   members: Member[] = [];
   departments: Department[] = [];
   logs: LogEntry[] = [];
@@ -263,7 +291,7 @@ export class ModuleComponent implements OnInit, OnDestroy {
     return this.hasRole('MEMBER_DOCTOR') ? 'Bác sĩ' : this.hasRole('MEMBER_NURSE') ? 'Điều dưỡng' : 'Khoa KSNK';
   }
   get canCreateCaseReport(): boolean { return this.canRecord && this.hasRole('MEMBER_DOCTOR'); }
-  get canReadCaseReports(): boolean { return this.canCreateCaseReport || this.canFollowReports; }
+  get canReadCaseReports(): boolean { return this.hasRole('MEMBER_DOCTOR') || Boolean(this.context?.seesAll); }
   get canSubmitWeeklyReport(): boolean {
     return this.canRecord && this.hasRole('MEMBER_DOCTOR', 'MEMBER_NURSE', 'NETWORK_MEMBER', 'DEPARTMENT_HEAD');
   }
@@ -428,6 +456,7 @@ export class ModuleComponent implements OnInit, OnDestroy {
   switchPersona(persona: string): void {
     this.dataRequest?.unsubscribe(); this.listRequest?.unsubscribe(); this.summaryRequest?.unsubscribe();
     this.context = null; this.overview = null; this.issues = []; this.todos = []; this.success = '';
+    this.reportView = 'weekly'; this.customDepartmentCode = ''; this.aggregateReport = null;
     this.reports = []; this.reportReadiness = null; this.weeklyReports = []; this.weeklyReportReadiness = null;
     this.weeklySummaries = null; this.weeklyCaseReports = []; this.weeklyCaseReportSummary = null;
     this.weeklyFormPeriod = ''; this.caseReports = []; this.caseReportSummary = null;
@@ -842,6 +871,48 @@ export class ModuleComponent implements OnInit, OnDestroy {
   reportRate(report: Report): string {
     return this.rate(report.risksFound ? Math.round(report.risksClosed / report.risksFound * 1000) / 10 : null);
   }
+  get exportTypeSelectionValid(): boolean {
+    return this.exportReportTypes.some((type) => type.selected &&
+      (type.value !== 'caseReports' || this.canReadCaseReports));
+  }
+  createAggregateReport(): void {
+    const types = this.exportReportTypes.filter((type) => type.selected &&
+      (type.value !== 'caseReports' || this.canReadCaseReports)).map((type) => type.value);
+    if (!this.customFrom || !this.customTo || this.customFrom > this.customTo || this.customTo > this.today) {
+      this.error = 'Chọn khoảng ngày hợp lệ, không vượt quá hôm nay.';
+      return;
+    }
+    if (!types.length) {
+      this.error = 'Chọn ít nhất một loại phiếu hoặc báo cáo.';
+      return;
+    }
+    this.error = '';
+    this.aggregateReport = null;
+    this.aggregateReportLoading = true;
+    this.subscriptions.add(this.api.post<AggregateReport>('/module/aggregate-report', {
+      from: this.customFrom,
+      to: this.customTo,
+      departmentCode: this.customDepartmentCode,
+      group: this.customGroup,
+      issueStatus: this.customIssueStatus,
+      types,
+      includeDetails: this.includeExportDetails,
+    }).subscribe({
+      next: (result) => {
+        this.aggregateReport = result;
+        this.aggregateReportLoading = false;
+      },
+      error: (error: HttpErrorResponse) => {
+        this.aggregateReportLoading = false;
+        this.fail(error);
+      },
+    }));
+  }
+  exportAggregateReport(): void {
+    if (!this.aggregateReport?.sheets.length) return;
+    this.downloadSpreadsheet(`ksnk-tong-hop-${this.aggregateReport.from}-${this.aggregateReport.to}.xls`,
+      this.aggregateReport.sheets);
+  }
   caseTypeLabel(type: string): string {
     return type === 'hospital-infection' ? 'Nhiễm khuẩn bệnh viện' : 'Bệnh truyền nhiễm/cách ly';
   }
@@ -852,6 +923,9 @@ export class ModuleComponent implements OnInit, OnDestroy {
   interventionLabel(value: string): string {
     return ({ no: 'Chưa cần can thiệp', dept: 'Trong khoa', ksnk: 'Phối hợp KSNK',
       hospital: 'Phối hợp toàn viện' } as Record<string, string>)[value] || value;
+  }
+  reportDepartmentName(code: string): string {
+    return this.reportReadiness?.departments.find((department) => department.departmentCode === code)?.departmentName || code;
   }
   caseOutcomeLabel(value: string): string {
     return ({ ongoing: 'Đang điều trị/theo dõi', admitted: 'Nhập viện', discharged: 'Ra viện',
@@ -1053,8 +1127,8 @@ export class ModuleComponent implements OnInit, OnDestroy {
   }
   private caseReportDetailRows(reports = this.caseReports): (string | number)[][] {
     return [
-      ['Ngày', 'Loại phiếu', 'Bác sĩ', 'Mã nhân viên', 'Khoa', 'Mã ca/tên giả', 'Năm sinh',
-        'Giới tính', 'Địa chỉ (dữ liệu giả)', 'Ngày nhập viện', 'Chẩn đoán',
+      ['Ngày', 'Loại phiếu', 'Bác sĩ', 'Mã nhân viên', 'Khoa', 'Mã ca/tên', 'Năm sinh',
+        'Giới tính', 'Địa chỉ', 'Ngày nhập viện', 'Chẩn đoán',
         'Phân loại ca', 'Kết quả/diễn biến', 'Kết quả xét nghiệm', 'Loại nhiễm khuẩn',
         'Bắt đầu cách ly', 'Kết thúc cách ly', 'Biện pháp phòng ngừa', 'Ghi chú',
         'Phương án xử trí', 'Chi tiết xử trí'],

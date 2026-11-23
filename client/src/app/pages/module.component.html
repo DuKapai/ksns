@@ -280,6 +280,9 @@
         <nav class="seg" aria-label="Loại báo cáo">
           <button type="button" [class.on]="reportView === 'weekly'" (click)="reportView = 'weekly'">Báo cáo tuần</button>
           <button type="button" [class.on]="reportView === 'monthly'" (click)="reportView = 'monthly'">Báo cáo tháng</button>
+          @if (canFollowReports) {
+            <button type="button" [class.on]="reportView === 'custom'" (click)="reportView = 'custom'">Xuất theo điều kiện</button>
+          }
         </nav>
 
         @if (reportView === 'weekly') {
@@ -676,6 +679,99 @@
           }
         </section> }
         }
+
+        @if (reportView === 'custom' && canFollowReports) {
+          <section class="box">
+            <h2>Xuất báo cáo theo điều kiện</h2>
+            <p class="hint">Mỗi loại phiếu có bảng tổng hợp và mẫu số riêng để tính tỷ lệ. Tệp chi tiết ca bệnh không chứa tên hoặc địa chỉ người bệnh.</p>
+            <div class="two">
+              <label>Từ ngày <input type="date" [(ngModel)]="customFrom" [max]="today" /></label>
+              <label>Đến ngày <input type="date" [(ngModel)]="customTo" [max]="today" /></label>
+            </div>
+            <label>Phạm vi khoa/phòng
+              <select [(ngModel)]="customDepartmentCode">
+                <option value="">Tất cả khoa/phòng được xem</option>
+                @for (department of reportReadiness?.departments || []; track department.departmentCode) {
+                  <option [value]="department.departmentCode">{{ department.departmentName }}</option>
+                }
+              </select>
+            </label>
+            <div class="two">
+              <label>Nhóm báo cáo
+                <select [(ngModel)]="customGroup">
+                  <option value="all">Toàn mạng lưới</option>
+                  <option value="doctors">Bác sĩ</option>
+                  <option value="members">Thành viên mạng lưới khác</option>
+                </select>
+              </label>
+              <label>Trạng thái vấn đề
+                <select [(ngModel)]="customIssueStatus">
+                  <option value="all">Tất cả trạng thái</option>
+                  <option value="open">Đang xử lý/chờ xác minh</option>
+                  <option value="closed">Đã khắc phục</option>
+                </select>
+              </label>
+            </div>
+            <fieldset>
+              <legend>Chọn loại phiếu/báo cáo</legend>
+              <div class="choices two">
+                @for (type of exportReportTypes; track type.value) {
+                  @if (type.value !== 'caseReports' || canReadCaseReports) {
+                    <label class="choice" [class.on]="type.selected">
+                      <input type="checkbox" [(ngModel)]="type.selected" [attr.aria-label]="type.label" />
+                      <strong>{{ type.label }}</strong>
+                    </label>
+                  }
+                }
+              </div>
+            </fieldset>
+            <label class="inline">
+              <input type="checkbox" [(ngModel)]="includeExportDetails" />
+              Kèm bảng chi tiết từng phiếu
+            </label>
+            <div class="box-head">
+              <button type="button" class="btn" [disabled]="aggregateReportLoading || !exportTypeSelectionValid"
+                (click)="createAggregateReport()">
+                {{ aggregateReportLoading ? 'Đang tổng hợp…' : 'Tạo báo cáo' }}
+              </button>
+              @if (aggregateReport) {
+                <button type="button" class="link" (click)="exportAggregateReport()">Tải Excel</button>
+              }
+            </div>
+          </section>
+
+          @if (aggregateReport; as report) {
+            <section class="box">
+              <h2>Kết quả tổng hợp</h2>
+              <p class="hint">{{ date(report.from) }} – {{ date(report.to) }} ·
+                {{ report.group === 'all' ? 'Toàn mạng lưới' : report.group === 'doctors' ? 'Bác sĩ' : 'Thành viên mạng lưới khác' }}
+                @if (report.departmentCode) { · {{ reportDepartmentName(report.departmentCode) }} }
+              </p>
+              <p class="hint">Tệp Excel có {{ report.sheets.length }} trang tính. Trên màn hình hiển thị tối đa 10 dòng mỗi bảng.</p>
+              <div class="tiles three">
+                @for (type of exportReportTypes; track type.value) {
+                  @if (report.counts[type.value] !== undefined) {
+                    <div><b>{{ report.counts[type.value] }}</b><small>{{ type.label }}</small></div>
+                  }
+                }
+              </div>
+              @for (sheet of report.sheets; track sheet.name) {
+                <h3>{{ sheet.name }} <small>{{ sheet.recordCount }} dòng</small></h3>
+                @if (sheet.recordCount) {
+                  <div class="scroll"><table>
+                    <thead><tr>@for (cell of sheet.rows[0]; track $index) { <th>{{ cell }}</th> }</tr></thead>
+                    <tbody>
+                      @for (row of sheet.rows.slice(1, 11); track $index) {
+                        <tr>@for (cell of row; track $index) { <td>{{ cell }}</td> }</tr>
+                      }
+                    </tbody>
+                  </table></div>
+                  @if (sheet.recordCount > 10) { <small class="muted">Còn {{ sheet.recordCount - 10 }} dòng trong tệp Excel.</small> }
+                } @else { <p class="muted">Chưa có dữ liệu loại này trong kỳ đã chọn.</p> }
+              }
+            </section>
+          }
+        }
       }
 
       <!-- QUẢN LÝ -->
@@ -934,7 +1030,7 @@
             </label>
           </div>
           <p class="hint">Biểu mẫu demo: chỉ nhập dữ liệu giả, không nhập thông tin người bệnh thật.</p>
-          <label>Mã ca/tên giả <input name="patient" [(ngModel)]="infectionForm.patientName" maxlength="120" /></label>
+          <label>Mã ca/tên <input name="patient" [(ngModel)]="infectionForm.patientName" maxlength="120" /></label>
           <div class="two">
             <label>Năm sinh <input name="birthYear" type="number" min="1900" [max]="today.slice(0,4)"
               [(ngModel)]="infectionForm.patientBirthYear" /></label>
@@ -945,7 +1041,7 @@
               </select>
             </label>
           </div>
-          <label>Địa chỉ (dữ liệu giả) <input name="address" [(ngModel)]="infectionForm.patientAddress" maxlength="200" /></label>
+          <label>Địa chỉ <input name="address" [(ngModel)]="infectionForm.patientAddress" maxlength="200" /></label>
           <label>Mã chẩn đoán <input name="diagCode" [(ngModel)]="infectionForm.diagnosisCode" maxlength="40" /></label>
           <label>Chẩn đoán <input name="diag" [(ngModel)]="infectionForm.diagnosisName" maxlength="200" required /></label>
           <div class="two">
@@ -987,7 +1083,7 @@
           <div class="two">
             <label>Ngày phát hiện <input name="date" type="date" [max]="today" [(ngModel)]="transmissionForm.date" required /></label>
           </div>
-          <label>Mã ca/tên giả <input name="patient" [(ngModel)]="transmissionForm.patientName" maxlength="120" /></label>
+          <label>Mã ca/tên <input name="patient" [(ngModel)]="transmissionForm.patientName" maxlength="120" /></label>
           <div class="two">
             <label>Năm sinh <input name="birthYear" type="number" min="1900" [max]="today.slice(0,4)"
               [(ngModel)]="transmissionForm.patientBirthYear" /></label>
@@ -998,7 +1094,7 @@
               </select>
             </label>
           </div>
-          <label>Địa chỉ (dữ liệu giả) <input name="address" [(ngModel)]="transmissionForm.patientAddress" maxlength="200" /></label>
+          <label>Địa chỉ <input name="address" [(ngModel)]="transmissionForm.patientAddress" maxlength="200" /></label>
           <label>Bệnh truyền nhiễm <input name="disease" [(ngModel)]="transmissionForm.diagnosisName" maxlength="200" required /></label>
           <div class="two">
             <label>Phân loại ca bệnh

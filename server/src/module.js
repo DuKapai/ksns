@@ -136,6 +136,334 @@ function reportFor(data, member, month) {
     report.month === month && owned(member, report, "employeeCode", "submittedBy"));
 }
 
+const aggregateReportTypes = {
+  monitorings: "Bảng kiểm thành viên (VST, PPE, chất thải)",
+  doctorObservations: "Giám sát chuyên môn bác sĩ",
+  dailySurveillance: "Giám sát gói phòng ngừa hằng ngày",
+  surveillanceCases: "Ca nghi ngờ/cách ly",
+  risks: "Nguy cơ, vấn đề và khắc phục",
+  caseReports: "Ca bệnh bác sĩ",
+  weeklyReports: "Báo cáo tuần",
+  monthlyReports: "Báo cáo tháng",
+};
+
+function aggregateReport(data, filters) {
+  const { from, to, group, departmentCode, issueStatus, types, includeDetails } = filters;
+  const membersByCode = new Map((data.members || []).map((member) => [member.employeeCode, member]));
+  const memberType = (item, fallback = "") => {
+    if (item.memberType) return item.memberType;
+    if (item.source === "doctor" || fallback === "doctor") return "Bác sĩ";
+    if (item.observerRole === "MEMBER_DOCTOR") return "Bác sĩ";
+    if (item.observerRole === "MEMBER_NURSE") return "Điều dưỡng";
+    const member = membersByCode.get(item.employeeCode || item.observerEmployeeCode);
+    if (member) return member.memberType;
+    const name = item.submittedBy || item.observer || item.reporter || item.doctor;
+    return (data.members || []).find((entry) => entry.fullName === name &&
+      (!item.departmentCode || entry.departmentCode === item.departmentCode))?.memberType || "";
+  };
+  const inGroup = (item, fallback) => {
+    if (group === "all") return true;
+    const type = memberType(item, fallback);
+    return group === "doctors" ? type === "Bác sĩ" : type !== "Bác sĩ" && type !== "KSNK";
+  };
+  const inDepartment = (item) => !departmentCode || item.departmentCode === departmentCode;
+  const inDate = (item, date) => during(date, from, to) && inDepartment(item);
+  const selected = (type) => types.includes(type);
+  const pct = (part, total) => total ? Math.round(part / total * 1000) / 10 : "";
+  const sum = (items, key) => items.reduce((total, item) => total + (Number(item[key]) || 0), 0);
+  const department = (item) => item.departmentName || item.departmentCode || "Chưa xác định";
+  const sheets = [];
+  const counts = {};
+  const addSheet = (name, headers, rows) => sheets.push({
+    name, rows: [headers, ...rows], recordCount: rows.length,
+  });
+  const groupRows = (items, keyFor, makeRow) => {
+    const groups = new Map();
+    for (const item of items) {
+      const key = keyFor(item);
+      groups.set(key, [...(groups.get(key) || []), item]);
+    }
+    return [...groups.values()].map(makeRow);
+  };
+
+  const monitoringRows = selected("monitorings")
+    ? (data.monitorings || []).filter((item) => inDate(item, item.date) && inGroup(item))
+    : [];
+  counts.monitorings = monitoringRows.length;
+  if (selected("monitorings")) {
+    const summary = groupRows(monitoringRows,
+      (item) => [item.departmentCode, item.area, item.observedRole].join("\u0000"),
+      (items) => {
+        const total = sum(items, "sampleSize");
+        const met = sum(items, "compliant");
+        const notPerformed = sum(items, "notPerformed");
+        return [department(items[0]), items[0].area || "Chưa phân loại", items[0].observedRole || "Chưa phân loại",
+          items.length, total, met, Math.max(0, total - met - notPerformed), notPerformed, pct(met, total)];
+      });
+    addSheet("Bảng kiểm thành viên",
+      ["Khoa/phòng", "Nội dung kiểm tra", "Đối tượng được kiểm tra", "Số phiếu", "Tổng lượt", "Đạt",
+        "Chưa đạt", "Không thực hiện VST", "Tỷ lệ đạt (%)"], summary);
+    if (includeDetails) addSheet("Chi tiết bảng kiểm",
+      ["Ngày", "Khoa/phòng", "Người giám sát", "Đối tượng", "Người được giám sát", "Nội dung",
+        "Số lượt", "Đạt", "Không thực hiện VST", "Kết quả/ghi chú", "Quy trình", "Loại chất thải"],
+      monitoringRows.map((item) => [item.date, department(item), item.observer || "", item.observedRole || "",
+        item.observedPerson || "", item.area || "", item.sampleSize, item.compliant, item.notPerformed || 0,
+        item.findings || item.practiceResult || "", item.procedure || "", item.wasteType || ""]));
+  }
+
+  const doctorObservations = selected("doctorObservations")
+    ? (data.doctorObservations || []).filter((item) => inDate(item, item.date) && inGroup(item, "doctor"))
+    : [];
+  counts.doctorObservations = doctorObservations.length;
+  if (selected("doctorObservations")) {
+    const summary = groupRows(doctorObservations,
+      (item) => [item.departmentCode, item.topic].join("\u0000"),
+      (items) => {
+        const criteria = items.flatMap((item) => Array.isArray(item.criteria) ? item.criteria : []);
+        const met = criteria.filter((item) => item.result === "Đạt").length;
+        const notMet = criteria.filter((item) => item.result === "Chưa đạt").length;
+        const notApplicable = criteria.filter((item) => item.result === "Không áp dụng").length;
+        const unknown = criteria.filter((item) => item.result === "Không đánh giá được").length;
+        return [department(items[0]), items[0].topic || "Chưa phân loại", items.length, sum(items, "sampleSize"),
+          met, notMet, notApplicable, unknown, pct(met, met + notMet)];
+      });
+    addSheet("Giám sát bác sĩ",
+      ["Khoa/phòng", "Chuyên đề BM-BS01", "Số phiếu", "Số hồ sơ/lượt rà soát", "Tiêu chí đạt",
+        "Chưa đạt", "Không áp dụng", "Không đánh giá được", "Tỷ lệ đạt (%)"], summary);
+    if (includeDetails) addSheet("Chi tiết giám sát BS",
+      ["Ngày", "Bác sĩ", "Khoa/phòng", "Chuyên đề", "Kỳ", "Số hồ sơ/lượt", "Đạt", "Chưa đạt",
+        "Không áp dụng", "Không đánh giá được", "Kết quả tiêu chí", "Kết luận/ghi chú", "Theo dõi",
+        "Đã thông báo cho"],
+      doctorObservations.map((item) => {
+        const criteria = Array.isArray(item.criteria) ? item.criteria : [];
+        return [item.date, item.observer || "", department(item), item.topic || "", item.period || "",
+          item.sampleSize || 0, criteria.filter((entry) => entry.result === "Đạt").length,
+          criteria.filter((entry) => entry.result === "Chưa đạt").length,
+          criteria.filter((entry) => entry.result === "Không áp dụng").length,
+          criteria.filter((entry) => entry.result === "Không đánh giá được").length,
+          criteria.map((entry) => `${entry.label}: ${entry.result}`).join("; "),
+          item.summary || "", item.followUp || "", item.notifiedTo || ""];
+      }));
+  }
+
+  const dailyRows = selected("dailySurveillance")
+    ? (data.dailySurveillance || []).filter((item) => inDate(item, item.date) && inGroup(item, "doctor"))
+    : [];
+  counts.dailySurveillance = dailyRows.length;
+  if (selected("dailySurveillance")) {
+    const bundleLabels = {
+      VAP: "Viêm phổi liên quan thở máy", CAUTI: "Nhiễm khuẩn tiết niệu liên quan catheter",
+      SSI: "Nhiễm khuẩn vết mổ", CLABSI: "Nhiễm khuẩn huyết liên quan catheter",
+    };
+    const summary = [];
+    for (const item of dailyRows) {
+      for (const [key, values] of Object.entries(item.bundles || {})) {
+        summary.push({ ...values, departmentCode: item.departmentCode, departmentName: item.departmentName,
+            key, date: item.date, submittedBy: item.submittedBy, note: item.note });
+      }
+    }
+    const bundleSummary = groupRows(summary,
+      (item) => [item.departmentCode, item.key].join("\u0000"),
+      (items) => {
+        const eligible = sum(items, "eligible");
+        const compliant = sum(items, "compliant");
+        return [department(items[0]), bundleLabels[items[0].key] || items[0].key, items.length,
+          eligible, compliant, Math.max(0, eligible - compliant), pct(compliant, eligible)];
+      });
+    addSheet("Gói phòng ngừa hằng ngày",
+      ["Khoa/phòng", "Gói/chuyên đề", "Số lượt báo cáo", "Đối tượng đủ điều kiện", "Đạt", "Chưa đạt",
+        "Tỷ lệ tuân thủ (%)"], bundleSummary);
+    if (includeDetails) addSheet("Chi tiết gói hằng ngày",
+      ["Ngày", "Khoa/phòng", "Người gửi", "Gói/chuyên đề", "Đủ điều kiện", "Đạt", "Tỷ lệ (%)", "Ghi chú"],
+      summary.map((item) => [item.date, department(item), item.submittedBy || "", bundleLabels[item.key] || item.key,
+        item.eligible || 0, item.compliant || 0, pct(item.compliant || 0, item.eligible || 0), item.note || ""]));
+  }
+
+  const surveillanceCases = selected("surveillanceCases")
+    ? (data.surveillanceCases || []).filter((item) => inDate(item, item.date) && inGroup(item))
+    : [];
+  counts.surveillanceCases = surveillanceCases.length;
+  if (selected("surveillanceCases")) {
+    const summary = groupRows(surveillanceCases,
+      (item) => [item.departmentCode, item.type, item.isolationStatus, item.councilStatus].join("\u0000"),
+      (items) => [department(items[0]), items[0].type || "Chưa phân loại",
+        items[0].isolationStatus || "Chưa cập nhật", items[0].councilStatus || "Chưa cập nhật", items.length,
+        pct(items.length, surveillanceCases.length)]);
+    addSheet("Ca nghi ngờ và cách ly",
+      ["Khoa/phòng", "Loại tình huống", "Tình trạng cách ly", "Trạng thái HĐKH", "Số ca", "Tỷ lệ trên tổng (%)"],
+      summary);
+    if (includeDetails) addSheet("Chi tiết ca nghi ngờ",
+      ["Ngày", "Mã phiếu", "Khoa/phòng", "Loại tình huống", "Vị trí", "Trạng thái ca",
+        "Dấu hiệu/tình huống", "Tình trạng cách ly", "Hình thức cách ly", "Nơi đã thông báo", "Thời điểm thông báo",
+        "Trạng thái HĐKH", "Người báo cáo", "Biện pháp ban đầu", "Mã tham chiếu HĐKH"],
+      surveillanceCases.map((item) => [item.date, item.code || item.id, department(item), item.type || "",
+        item.location || "", item.status || "", item.findings || "", item.isolationStatus || "", item.isolationType || "",
+        item.notifiedTo || "", item.notifiedAt || "", item.councilStatus || "", item.reportedBy || item.submittedBy || "",
+        item.initialAction || "", item.councilReference || ""]));
+  }
+
+  let risks = selected("risks")
+    ? (data.risks || []).filter((item) => inDate(item, vietnamDate(item.createdAt)) && inGroup(item))
+    : [];
+  if (issueStatus === "open") risks = risks.filter((item) => item.status !== "Đã đóng");
+  if (issueStatus === "closed") risks = risks.filter((item) => item.status === "Đã đóng");
+  counts.risks = risks.length;
+  if (selected("risks")) {
+    const summary = groupRows(risks,
+      (item) => [item.departmentCode, item.category, item.severity].join("\u0000"),
+      (items) => {
+        const closed = items.filter((item) => item.status === "Đã đóng").length;
+        const overdue = items.filter((item) => !["Đã đóng", "Chờ kiểm tra lại"].includes(item.status) &&
+          validDate(item.dueDate) && item.dueDate < vietnamDate()).length;
+        const statusCount = (status) => items.filter((item) => item.status === status).length;
+        return [department(items[0]), items[0].category || "Chưa phân loại", items[0].severity || "Chưa phân loại",
+          items.length, statusCount("Mới ghi nhận"), statusCount("Đã tiếp nhận"), statusCount("Đang khắc phục"),
+          statusCount("Chờ kiểm tra lại"), overdue, closed, pct(closed, items.length)];
+      });
+    addSheet("Nguy cơ và khắc phục",
+      ["Khoa/phòng", "Loại nguy cơ/vấn đề", "Mức độ", "Tổng phiếu", "Mới ghi nhận", "Đã tiếp nhận",
+        "Đang khắc phục", "Chờ xác minh", "Quá hạn", "Đã khắc phục", "Tỷ lệ khắc phục (%)"], summary);
+    if (includeDetails) addSheet("Chi tiết vấn đề",
+      ["Ngày ghi nhận", "Mã phiếu", "Khoa/phòng", "Nội dung", "Loại", "Mức độ", "Trạng thái",
+        "Người báo cáo", "Đơn vị/người phụ trách", "Hạn xử lý", "Biện pháp ban đầu", "Khắc phục", "Xác minh"],
+      risks.map((item) => [vietnamDate(item.createdAt), item.code || item.id, department(item), item.title || item.description || "",
+        item.category || "", item.severity || "", item.status || "", item.reporter || "",
+        item.assignedTo || "", item.dueDate || "", item.immediateAction || "", item.correction || "", item.verification || ""]));
+  }
+
+  const caseReports = selected("caseReports")
+    ? (data.caseReports || []).filter((item) => inDate(item, item.date) && inGroup(item, "doctor"))
+    : [];
+  counts.caseReports = caseReports.length;
+  if (selected("caseReports")) {
+    const infectionLabels = { urinary: "Nhiễm khuẩn tiết niệu", respiratory: "Nhiễm khuẩn liên quan thở máy",
+      bloodstream: "Nhiễm khuẩn huyết", "surgical-wound": "Nhiễm khuẩn vết mổ" };
+    const interventionLabels = { no: "Chưa cần can thiệp", dept: "Trong phạm vi khoa",
+      ksnk: "Phối hợp KSNK", hospital: "Phối hợp toàn viện" };
+    const classificationLabels = { suspected: "Nghi ngờ", confirmed: "Xác định" };
+    const outcomeLabels = { ongoing: "Đang điều trị/theo dõi", admitted: "Nhập viện", discharged: "Ra viện",
+      transferred: "Chuyển viện", deceased: "Tử vong" };
+    const groups = [
+      ["Nhóm phiếu", caseReports.map((item) => item.type === "hospital-infection" ? "Nhiễm khuẩn bệnh viện" : "Truyền nhiễm/cách ly")],
+      ["Loại nhiễm khuẩn bệnh viện", caseReports.filter((item) => item.type === "hospital-infection")
+        .map((item) => infectionLabels[item.infectionType] || "Khác/chưa phân loại")],
+      ["Phương án xử trí", caseReports.map((item) => interventionLabels[item.interventionNeeded] || "Chưa cập nhật")],
+    ];
+    const summary = groups.flatMap(([kind, values]) => [...new Set(values)].sort().map((value) => {
+      const count = values.filter((item) => item === value).length;
+      return [kind, value, count, pct(count, values.length)];
+    }));
+    addSheet("Tổng hợp ca bệnh",
+      ["Nhóm chỉ tiêu", "Phân loại", "Số ca", "Tỷ lệ trong nhóm (%)"], summary);
+    const transmissionCases = caseReports.filter((item) => item.type === "transmission-disease");
+    const diseases = groupRows(transmissionCases, (item) => item.diagnosisName || "Chưa phân loại", (items) => [
+      items[0].diagnosisName || "Chưa phân loại", items.length,
+      items.filter((item) => item.caseClassification === "suspected").length,
+      pct(items.filter((item) => item.caseClassification === "suspected").length, items.length),
+      items.filter((item) => item.caseClassification === "confirmed").length,
+      pct(items.filter((item) => item.caseClassification === "confirmed").length, items.length),
+      items.filter((item) => item.outcome === "admitted").length,
+      pct(items.filter((item) => item.outcome === "admitted").length, items.length),
+      items.filter((item) => item.outcome === "discharged").length,
+      pct(items.filter((item) => item.outcome === "discharged").length, items.length),
+      items.filter((item) => item.outcome === "transferred").length,
+      pct(items.filter((item) => item.outcome === "transferred").length, items.length),
+      items.filter((item) => item.outcome === "deceased").length,
+      pct(items.filter((item) => item.outcome === "deceased").length, items.length),
+      items.filter((item) => item.outcome === "ongoing").length,
+      pct(items.filter((item) => item.outcome === "ongoing").length, items.length),
+      pct(items.length, transmissionCases.length),
+    ]);
+    addSheet("Truyền nhiễm theo bệnh",
+      ["Bệnh/chẩn đoán", "Tổng ca", "Nghi ngờ", "Tỷ lệ (%)", "Xác định", "Tỷ lệ (%)", "Nhập viện", "Tỷ lệ (%)",
+        "Ra viện", "Tỷ lệ (%)", "Chuyển viện", "Tỷ lệ (%)", "Tử vong", "Tỷ lệ (%)",
+        "Đang điều trị/theo dõi", "Tỷ lệ (%)", "Tỷ lệ trong nhóm (%)"], diseases);
+    if (includeDetails) addSheet("Chi tiết ca bệnh",
+      ["Ngày", "Khoa/phòng", "Loại phiếu", "Chẩn đoán", "Loại nhiễm khuẩn", "Phân loại",
+        "Diễn biến", "Phương án xử trí"],
+      caseReports.map((item) => [item.date, department(item),
+        item.type === "hospital-infection" ? "Nhiễm khuẩn bệnh viện" : "Truyền nhiễm/cách ly",
+        item.diagnosisName || "", infectionLabels[item.infectionType] || "",
+        classificationLabels[item.caseClassification] || "", outcomeLabels[item.outcome] || "",
+        interventionLabels[item.interventionNeeded] || ""]));
+  }
+
+  const weeklyReports = selected("weeklyReports")
+    ? (data.weeklyReports || []).filter((item) => item.to >= from && item.from <= to &&
+      inDepartment(item) && inGroup(item))
+    : [];
+  counts.weeklyReports = weeklyReports.length;
+  if (selected("weeklyReports")) {
+    const summary = groupRows(weeklyReports,
+      (item) => [item.departmentCode, memberType(item), item.status].join("\u0000"),
+      (items) => [department(items[0]), memberType(items[0]) || "Chưa xác định",
+        items[0].status || "Chưa xác định", items.length,
+        items.filter((item) => item.difficulties).length, items.filter((item) => item.recommendations).length]);
+    addSheet("Tổng hợp báo cáo tuần",
+      ["Khoa/phòng", "Nhóm/chức danh", "Trạng thái", "Số báo cáo", "Có khó khăn", "Có kiến nghị"], summary);
+    if (includeDetails) addSheet("Chi tiết báo cáo tuần",
+      ["Từ ngày", "Đến ngày", "Người báo cáo", "Nhóm/chức danh", "Khoa/phòng", "Hoạt động",
+        "Khó khăn", "Kế hoạch tuần tới", "Đề xuất/kiến nghị"],
+      weeklyReports.map((item) => [item.from, item.to, item.submittedBy || "", memberType(item) || "",
+        department(item), item.activities || "", item.difficulties || "", item.nextWeekPlan || "",
+        item.recommendations || ""]));
+  }
+
+  const monthlyReports = selected("monthlyReports")
+    ? [...(data.monthlyReports || []).map((item) => ({ ...item })),
+      ...(data.doctorReports || []).map((item) => ({ ...item, source: "doctor", memberType: "Bác sĩ" }))]
+      .filter((item) => item.month >= from.slice(0, 7) && item.month <= to.slice(0, 7) &&
+        inDepartment(item) && inGroup(item, item.source === "doctor" ? "doctor" : ""))
+    : [];
+  counts.monthlyReports = monthlyReports.length;
+  if (selected("monthlyReports")) {
+    const monthlyFormType = (item) => item.source === "doctor" ? "BC-BS04 · Báo cáo tháng bác sĩ" : "Báo cáo tháng mạng lưới";
+    const summary = groupRows(monthlyReports,
+      (item) => [item.month, item.departmentCode, monthlyFormType(item),
+        memberType(item, item.source === "doctor" ? "doctor" : "")].join("\u0000"),
+      (items) => {
+        const monitoring = (item) => Number(item.monitoringCount ?? item.summary?.monitoringCount) || 0;
+        const found = (item) => Number(item.risksFound ?? item.summary?.riskCount) || 0;
+        const closed = (item) => Number(item.risksClosed ?? item.summary?.closedRiskCount) || 0;
+        const totalFound = items.reduce((total, item) => total + found(item), 0);
+        const totalClosed = items.reduce((total, item) => total + closed(item), 0);
+        return [items[0].month, department(items[0]), monthlyFormType(items[0]),
+          memberType(items[0], items[0].source === "doctor" ? "doctor" : "") || "Chưa xác định",
+          items.length, items.reduce((total, item) => total + monitoring(item), 0),
+        totalFound, totalClosed, pct(totalClosed, totalFound)];
+      });
+    addSheet("Tổng hợp báo cáo tháng",
+      ["Tháng", "Khoa/phòng", "Loại mẫu", "Nhóm/chức danh", "Số báo cáo", "Lượt giám sát", "Vấn đề",
+        "Đã khắc phục", "Tỷ lệ khắc phục (%)"], summary);
+    if (includeDetails) addSheet("Chi tiết báo cáo tháng",
+      ["Tháng", "Loại mẫu", "Người xác nhận", "Nhóm/chức danh", "Khoa/phòng", "Giám sát", "Vấn đề",
+        "Đã khắc phục", "Hoạt động/sự việc", "Kiến nghị", "Ngày xác nhận"],
+      monthlyReports.map((item) => [item.month, monthlyFormType(item), item.submittedBy || item.doctor || "", memberType(item,
+        item.source === "doctor" ? "doctor" : "") || "", department(item),
+      item.monitoringCount ?? item.summary?.monitoringCount ?? 0, item.risksFound ?? item.summary?.riskCount ?? 0,
+      item.risksClosed ?? item.summary?.closedRiskCount ?? 0,
+      item.activities || item.incidents || "", item.recommendations || "", item.createdAt || ""]));
+  }
+
+  const departmentName = (data.members || []).find((member) => member.departmentCode === departmentCode)?.departmentName;
+  const overviewRows = [
+    ["Từ ngày", from],
+    ["Đến ngày", to],
+    ["Nhóm", group === "all" ? "Toàn mạng lưới" : group === "doctors" ? "Bác sĩ" : "Thành viên mạng lưới khác"],
+    ["Khoa/phòng", departmentCode ? departmentName || departmentCode : "Tất cả khoa/phòng được xem"],
+    ["Trạng thái vấn đề", issueStatus === "all" ? "Tất cả" : issueStatus === "open" ? "Đang xử lý/chờ xác minh" : "Đã khắc phục"],
+    ["Có kèm chi tiết", includeDetails ? "Có" : "Không"],
+    ...types.map((type) => [aggregateReportTypes[type], counts[type] || 0]),
+  ];
+  sheets.unshift({ name: "Tham số & tổng quan", rows: [["Tham số / loại dữ liệu", "Giá trị / số bản ghi"], ...overviewRows],
+    recordCount: overviewRows.length });
+
+  return {
+    from, to, group, departmentCode, issueStatus, types, counts,
+    sheets,
+  };
+}
+
 export function moduleRouter({ currentUser, audit }) {
   const router = Router();
   const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
@@ -281,7 +609,47 @@ export function moduleRouter({ currentUser, audit }) {
       from, to, required, submitted, rate: percent(submitted, required),
       complete: doctors.required > 0 && otherMembers.required > 0 && doctors.complete && otherMembers.complete,
       doctors, members: otherMembers, missing,
+      departments: [...new Map(members.map((member) => [member.departmentCode, {
+        departmentCode: member.departmentCode, departmentName: member.departmentName,
+      }])).values()].sort((a, b) => a.departmentName.localeCompare(b.departmentName, "vi")),
     });
+  }));
+  router.post("/aggregate-report", asyncRoute(async (req, res) => {
+    if (!canFollowReports(req.user)) {
+      return res.status(403).json({ message: "Chỉ Khoa KSNK hoặc lãnh đạo khoa được xuất báo cáo tổng hợp." });
+    }
+    const body = req.body || {};
+    const validTypes = Object.keys(aggregateReportTypes);
+    if (!validDate(body.from) || !validDate(body.to) || body.from > body.to ||
+        (Date.parse(`${body.to}T00:00:00Z`) - Date.parse(`${body.from}T00:00:00Z`)) / 86400000 > 730 ||
+        !["all", "doctors", "members"].includes(body.group) ||
+        !["all", "open", "closed"].includes(body.issueStatus) ||
+        !Array.isArray(body.types) || !body.types.length ||
+        body.types.some((type) => !validTypes.includes(type)) ||
+        body.types.length !== new Set(body.types).size ||
+        (body.includeDetails !== undefined && typeof body.includeDetails !== "boolean") ||
+        (body.departmentCode !== undefined &&
+          (typeof body.departmentCode !== "string" || body.departmentCode.length > 80))) {
+      return res.status(400).json({ message: "Kiểm tra lại khoảng ngày, nhóm, khoa/phòng và loại báo cáo đã chọn." });
+    }
+    if (body.types.includes("caseReports") &&
+        !req.user.roles?.includes("MEMBER_DOCTOR") && !seesAll(req.user)) {
+      return res.status(403).json({ message: "Chỉ bác sĩ và Khoa KSNK được xuất chi tiết báo cáo ca bệnh." });
+    }
+    const data = await readStore();
+    const departmentCode = body.departmentCode || (seesAll(req.user) ? "" : req.user.departmentCode);
+    if (departmentCode && !seesAll(req.user) && departmentCode !== req.user.departmentCode) {
+      return res.status(403).json({ message: "Không được xuất số liệu của khoa/phòng khác." });
+    }
+    if (departmentCode && !(data.members || []).some((member) =>
+      member.active && member.departmentCode === departmentCode && reportMemberTypes.includes(member.memberType))) {
+      return res.status(400).json({ message: "Khoa/phòng đã chọn không có thành viên mạng lưới đang hoạt động." });
+    }
+    res.json(aggregateReport(data, {
+      from: body.from, to: body.to, group: body.group, departmentCode,
+      issueStatus: body.issueStatus, types: body.types,
+      includeDetails: body.includeDetails !== false,
+    }));
   }));
   router.get("/weekly-reports", requireNetworkReader, asyncRoute(async (req, res) => {
     const { from, to } = req.query;
