@@ -532,7 +532,38 @@
         @if (canRecord && overview.work.ownReportRequired) {
           <section class="box">
             <h2>Báo cáo tháng của tôi</h2>
-            <label class="inline">Tháng báo cáo <input type="month" [(ngModel)]="reportMonth" [max]="today.slice(0,7)" (change)="reportMonthChanged()" /></label>
+            <div class="inline">
+              <span id="report-month-label">Tháng báo cáo</span>
+              <div class="month-picker" (focusout)="monthPickerFocusOut($event)" (keydown.escape)="closeMonthPicker(true); $event.stopPropagation()">
+                <button #monthPickerTrigger type="button" class="month-picker-trigger" aria-labelledby="report-month-label report-month-value"
+                  aria-haspopup="dialog" aria-controls="report-month-picker" [attr.aria-expanded]="monthPickerOpen" (click)="toggleMonthPicker()">
+                  <span id="report-month-value">{{ reportMonth ? 'Tháng ' + monthLabel(reportMonth) : 'Chọn tháng' }}</span>
+                  <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M7 3v4M17 3v4M3 10h18" /></svg>
+                </button>
+                @if (monthPickerOpen) {
+                  <div id="report-month-picker" class="month-picker-panel" role="dialog" aria-label="Chọn tháng báo cáo" animate.enter="motion-enter">
+                    <div class="month-picker-header">
+                      <button type="button" class="month-picker-arrow" aria-label="Năm trước" [disabled]="monthPickerYear <= 1" (click)="monthPickerYear = monthPickerYear - 1">‹</button>
+                      <strong aria-live="polite">{{ monthPickerYear }}</strong>
+                      <button type="button" class="month-picker-arrow" aria-label="Năm sau" [disabled]="monthPickerYear >= +today.slice(0,4)" (click)="monthPickerYear = monthPickerYear + 1">›</button>
+                    </div>
+                    <div class="month-picker-grid">
+                      @for (month of months; track month) {
+                        <button type="button" class="month-picker-month" [class.selected]="reportMonth === monthPickerValue(month)"
+                          [attr.aria-label]="'Tháng ' + month + ' năm ' + monthPickerYear"
+                          [attr.aria-pressed]="reportMonth === monthPickerValue(month)"
+                          [disabled]="monthPickerValue(month) > today.slice(0,7)"
+                          (click)="selectReportMonth(monthPickerValue(month))">Th{{ month }}</button>
+                      }
+                    </div>
+                    <div class="month-picker-footer">
+                      <button type="button" (click)="selectReportMonth('')">Xóa</button>
+                      <button type="button" (click)="selectReportMonth(today.slice(0,7))">Tháng này</button>
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
             @if (reportSummary) {
               <div class="tiles three">
                 <div><b>{{ reportSummary.monitoringCount }}</b><small>Lượt giám sát</small></div>

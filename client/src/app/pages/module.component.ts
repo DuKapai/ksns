@@ -162,6 +162,9 @@ export class ModuleComponent implements OnInit, OnDestroy {
   weekTo = this.previousWeekRange().to;
   weeklyForm = this.newWeeklyReport();
   reportMonth = this.previousMonth();
+  monthPickerOpen = false;
+  monthPickerYear = Number(this.today.slice(0, 4));
+  readonly months = Array.from({ length: 12 }, (_, index) => index + 1);
   reportSummary: Summary | null = null;
   summaryLoading = false;
   recommendation = '';
@@ -255,6 +258,7 @@ export class ModuleComponent implements OnInit, OnDestroy {
     this.dialog = element?.nativeElement;
     if (this.dialog && !this.dialog.open) this.dialog.showModal();
   }
+  @ViewChild('monthPickerTrigger') private monthPickerTrigger?: ElementRef<HTMLButtonElement>;
 
   constructor(private api: ApiService, private http: HttpClient, private route: ActivatedRoute, private router: Router) {}
 
@@ -704,6 +708,29 @@ export class ModuleComponent implements OnInit, OnDestroy {
     if (/^\d{4}-(0[1-9]|1[0-2])$/.test(this.reportMonth) && this.reportMonth <= this.today.slice(0, 7)) {
       this.loadSectionList();
     }
+  }
+
+  toggleMonthPicker(): void {
+    if (!this.monthPickerOpen) this.monthPickerYear = Number((this.reportMonth || this.today).slice(0, 4));
+    this.monthPickerOpen = !this.monthPickerOpen;
+  }
+  closeMonthPicker(restoreFocus = false): void {
+    this.monthPickerOpen = false;
+    if (restoreFocus) this.monthPickerTrigger?.nativeElement.focus();
+  }
+  monthPickerFocusOut(event: FocusEvent): void {
+    const container = event.currentTarget;
+    if (container instanceof HTMLElement && !(event.relatedTarget instanceof Node && container.contains(event.relatedTarget))) {
+      this.closeMonthPicker();
+    }
+  }
+  monthPickerValue(month: number): string {
+    return `${String(this.monthPickerYear).padStart(4, '0')}-${String(month).padStart(2, '0')}`;
+  }
+  selectReportMonth(value: string): void {
+    this.reportMonth = value;
+    this.closeMonthPicker(true);
+    this.reportMonthChanged();
   }
 
   private buildStats(summary: Summary): StatRow[] {
