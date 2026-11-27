@@ -1,6 +1,23 @@
-﻿:root{--ink:#173b38;--muted:#6b7d79;--line:#e2eae7;--paper:#f5f7f6;--green:#237c60;--green-soft:#e6f3ee;--red:#c0392b;--red-soft:#fdecea}
+﻿:root{--ink:#143b3e;--muted:#587477;--line:#dcebed;--paper:#f4f9f9;--green:#00cacf;--green-text:#00686c;--green-soft:#e1f8f8;--red:#c0392b;--red-soft:#fdecea}
 *{box-sizing:border-box}
-html,body{margin:0;min-height:100%;font-family:'Be Vietnam Pro',Arial,sans-serif;font-size:15px;color:var(--ink);background:var(--paper)}
+html,body{margin:0;min-height:100%;font-family:'Times New Roman',Times,serif;font-size:16px;color:var(--ink);background:var(--paper)}
+html{scrollbar-width:none}
+html::-webkit-scrollbar{display:none}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 a{color:inherit;text-decoration:none}
+
+.startup-loader{position:fixed;inset:0;z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:190px 24px 24px;text-align:center;background:#f7fcfc;color:var(--ink);opacity:1;visibility:visible;transition:opacity .3s ease}
+.startup-loader--done{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .3s ease,visibility 0s linear .3s}
+.startup-mark{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:grid;place-items:center;width:120px;height:120px}
+.startup-mark img{width:88px;height:88px;object-fit:contain}
+.startup-spinner{position:absolute;inset:0;border:3px solid #d5f1f1;border-top-color:var(--green);border-radius:50%;animation:startup-spin 1s linear infinite}
+.startup-status{color:var(--muted)}
+.startup-loader--failed .startup-spinner{animation:none;border-color:var(--red)}
+.motion-enter{animation:motion-enter .24s ease-out both}
+.login-enter{animation:motion-enter .375s ease-out both}
+.motion-leave{pointer-events:none;animation:motion-leave .18s ease-in both}
+@keyframes startup-spin{to{transform:rotate(360deg)}}
+@keyframes motion-enter{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes motion-leave{from{opacity:1}to{opacity:0}}
+@media (prefers-reduced-motion:reduce){.startup-spinner{animation:none}.startup-loader,.startup-loader--done{transition:none}.motion-enter,.motion-leave,.login-enter{animation-duration:.01ms}}

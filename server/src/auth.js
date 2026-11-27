@@ -3,6 +3,11 @@ import { readStore } from "./store.js";
 
 const secret =
   process.env.JWT_SECRET || "demo-only-change-this-secret-before-use";
+if (process.env.AUTH_MODE === "hospital" &&
+    (!process.env.JWT_SECRET || secret.length < 32 ||
+      ["demo-only-change-this-secret-before-use", "CHANGE_THIS_TO_A_LONG_RANDOM_SECRET_AT_LEAST_32_CHARS"].includes(secret))) {
+  throw new Error("Chế độ bệnh viện cần JWT_SECRET riêng, tối thiểu 32 ký tự.");
+}
 const ttlSeconds = 60 * 60 * 8;
 
 function b64(value) {

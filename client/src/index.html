@@ -7,13 +7,20 @@
     </title>
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#123f3b" />
+    <meta name="theme-color" content="#00cacf" />
     <meta
       name="description"
       content="Demo hệ thống quản lý mạng lưới kiểm soát nhiễm khuẩn bệnh viện"
     />
   </head>
   <body>
-    <app-root></app-root>
+    <app-root>
+      <div class="startup-loader" role="status" aria-live="polite">
+        <div class="startup-mark"><img src="assets/Logo.png" alt="" /><span class="startup-spinner" aria-hidden="true"></span></div>
+        <strong>Mạng lưới Kiểm soát nhiễm khuẩn</strong>
+        <span class="startup-status">Đang khởi động…</span>
+      </div>
+    </app-root>
+    <noscript>Vui lòng bật JavaScript để sử dụng ứng dụng.</noscript>
   </body>
 </html>

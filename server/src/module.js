@@ -8,8 +8,24 @@ export const isNetworkReader = (user) => user.roles?.some((role) => [...networkR
 export const seesAll = (user) => user.roles?.some((role) => ["KSNK_ADMIN", "NETWORK_LEAD", "NETWORK_DEPUTY", "NETWORK_SECRETARY"].includes(role));
 export const canRecord = (data, user) => user.roles?.some((role) => networkRoles.includes(role)) &&
   data.members.some((member) => member.active && member.employeeCode === user.employeeCode && member.departmentCode === user.departmentCode);
-export const visibleRisk = (user, item) => Boolean(user.employeeCode) && item.subjectEmployeeCode === user.employeeCode ||
-  isNetworkReader(user) && (seesAll(user) || item.departmentCode === user.departmentCode);
+export const ownsRecord = (user, item, code = "employeeCode") =>
+  Boolean(user.employeeCode && item[code]) && item[code] === user.employeeCode &&
+  item.departmentCode === user.departmentCode;
+export const visibleRisk = (user, item) => seesAll(user) || ownsRecord(user, item);
+
+export function notifyManagers(data, user, label, section = "reports", extra = {}) {
+  const recipients = new Set([
+    ...(data.users || []).filter((entry) => entry.active && seesAll(entry)).map((entry) => entry.employeeCode),
+    ...(data.members || []).filter((entry) => entry.active && entry.memberType === "KSNK").map((entry) => entry.employeeCode),
+  ].filter((code) => code && code !== user.employeeCode));
+  for (const recipient of recipients) {
+    (data.notifications ||= []).unshift({
+      id: makeId("notice"), recipient, section,
+      text: `${user.fullName} · ${user.departmentName}: ${label}`,
+      urgent: false, at: new Date().toISOString(), ...extra,
+    });
+  }
+}
 
 export function vietnamDate(value = new Date().toISOString()) {
   if (validDate(value)) return value;
@@ -49,8 +65,7 @@ export function plainAction(action = "") {
   return action;
 }
 
-const owned = (user, item, code, name) => item.departmentCode === user.departmentCode &&
-  (item[code] ? item[code] === user.employeeCode : item[name] === user.fullName);
+const owned = (user, item, code) => ownsRecord(user, item, code);
 const percent = (part, total) => total ? Math.round(part / total * 1000) / 10 : null;
 const during = (value, from, to) => { const date = vietnamDate(value); return date && date >= from && date <= to; };
 const filled = (value) => typeof value === "string" && value.trim().length > 0;
@@ -60,7 +75,7 @@ const transmissionOutcomes = ["ongoing", "admitted", "discharged", "transferred"
 const reportMemberTypes = ["Bác sĩ", "Điều dưỡng", "Hộ sinh", "Kỹ thuật y", "Lãnh đạo đơn vị"];
 const weeklyReportMemberTypes = ["Bác sĩ", "Điều dưỡng", "Hộ sinh", "Kỹ thuật y", "Lãnh đạo đơn vị"];
 const otherWeeklyReportMemberTypes = weeklyReportMemberTypes.filter((type) => type !== "Bác sĩ");
-const canFollowReports = (user) => seesAll(user) || user.roles?.includes("DEPARTMENT_HEAD");
+const canFollowReports = (user) => seesAll(user);
 const validWeekRange = (from, to) => validDate(from) && validDate(to) && from <= to &&
   to <= vietnamDate() && (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000 === 6;
 
@@ -81,7 +96,7 @@ function summarizeWeeklyGroup(data, user, from, to, memberTypes) {
 
 export function summarize(data, user, from, to, personal = false) {
   const allowed = (item, code, name) => isNetworkReader(user) && (personal ? owned(user, item, code, name) :
-    seesAll(user) || item.departmentCode === user.departmentCode);
+    seesAll(user) || owned(user, item, code));
   const monitorings = data.monitorings.filter((item) => allowed(item, "observerEmployeeCode", "observer") && during(item.date, from, to));
   const observations = (data.doctorObservations || []).filter((item) => allowed(item, "employeeCode", "observer") && during(item.date, from, to));
   const daily = (data.dailySurveillance || []).filter((item) => allowed(item, "employeeCode", "submittedBy") && during(item.date, from, to));
@@ -120,10 +135,29 @@ export function summarize(data, user, from, to, personal = false) {
       const notPerformed = items.reduce((sum, item) => sum + (item.notPerformed || 0), 0);
       return { role, area, total, met, notPerformed, rate: percent(met, total) };
     }).sort((a, b) => a.role.localeCompare(b.role, "vi") || a.area.localeCompare(b.area, "vi"));
+  const breakdown = new Map();
+  const countByDepartment = (item, type) => {
+    const key = `${item.departmentCode}\u0000${type}`;
+    const row = breakdown.get(key) || { departmentCode: item.departmentCode,
+      departmentName: item.departmentName || item.departmentCode, type, count: 0 };
+    row.count++;
+    breakdown.set(key, row);
+  };
+  for (const item of monitorings) countByDepartment(item, `Giám sát: ${item.area}`);
+  for (const item of observations) countByDepartment(item, "Giám sát bác sĩ");
+  for (const item of daily) countByDepartment(item, "Báo cáo hằng ngày");
+  for (const item of risks) countByDepartment(item, `Vấn đề: ${item.category || "Chưa phân loại"}`);
+  for (const item of data.caseReports || []) {
+    if (allowed(item, "employeeCode", "doctor") && during(item.date, from, to)) {
+      countByDepartment(item, item.type === "hospital-infection" ? "Nhiễm khuẩn bệnh viện" : "Bệnh truyền nhiễm/cách ly");
+    }
+  }
   return {
     monitoringCount: monitorings.length + observations.length + daily.length,
     risksFound: risks.length, risksClosed: closed, closureRate: percent(closed, risks.length),
     categories, compliance, departmentCompliance, roleCompliance,
+    departmentReportCounts: [...breakdown.values()].sort((a, b) =>
+      a.departmentName.localeCompare(b.departmentName, "vi") || a.type.localeCompare(b.type, "vi")),
   };
 }
 
@@ -512,7 +546,7 @@ export function moduleRouter({ currentUser, audit }) {
     const monthText = (value) => `${value.slice(5, 7)}/${value.slice(0, 4)}`;
     const required = isNetworkReader(req.user) ? data.members.filter((member) => member.active &&
       reportMemberTypes.includes(member.memberType) &&
-      (seesAll(req.user) || member.departmentCode === req.user.departmentCode)) : [];
+      (seesAll(req.user) || member.employeeCode === req.user.employeeCode)) : [];
     const missing = required.filter((member) => !reportFor(data, member, reportMonth));
     const notices = [
       ...open.filter((item) => item.severity === "Cao").map((item) => ({
@@ -527,19 +561,19 @@ export function moduleRouter({ currentUser, audit }) {
         urgent: true, section: "reports", reportMonth,
       })) : []),
       ...(data.notifications || []).filter((item) => item.recipient === req.user.employeeCode && !item.readAt)
-        .map((item) => ({ ...item, section: "risks" })),
+        .map((item) => ({ ...item, section: item.section || "risks" })),
     ];
     const activity = [
       ...risks.flatMap((item) => (item.timeline || []).map((event) => ({
         id: item.id, title: item.title, by: event.by, at: event.at, status: item.status, action: plainAction(event.action),
       }))),
-      ...(isNetworkReader(req.user) ? data.monitorings.filter((item) => seesAll(req.user) || item.departmentCode === req.user.departmentCode)
+      ...(isNetworkReader(req.user) ? data.monitorings.filter((item) => seesAll(req.user) || ownsRecord(req.user, item, "observerEmployeeCode"))
         .map((item) => ({ id: item.id, title: item.area, by: item.observer, at: item.createdAt || `${item.date}T00:00:00+07:00`, status: item.status, action: "Ghi nhận giám sát" })) : []),
-      ...(isNetworkReader(req.user) ? data.monthlyReports.filter((item) => seesAll(req.user) || item.departmentCode === req.user.departmentCode)
+      ...(isNetworkReader(req.user) ? data.monthlyReports.filter((item) => seesAll(req.user) || ownsRecord(req.user, item))
         .map((item) => ({ id: item.id, title: `Báo cáo tháng ${monthText(item.month)}`, by: item.submittedBy, at: item.createdAt, status: item.status, action: "Xác nhận báo cáo" })) : []),
-      ...(isNetworkReader(req.user) ? (data.doctorObservations || []).filter((item) => seesAll(req.user) || item.departmentCode === req.user.departmentCode)
+      ...(isNetworkReader(req.user) ? (data.doctorObservations || []).filter((item) => seesAll(req.user) || ownsRecord(req.user, item))
         .map((item) => ({ id: item.id, title: item.topic, by: item.observer, at: item.createdAt, status: "Đã ghi nhận", action: "Ghi nhận giám sát" })) : []),
-      ...(isNetworkReader(req.user) ? (data.dailySurveillance || []).filter((item) => seesAll(req.user) || item.departmentCode === req.user.departmentCode)
+      ...(isNetworkReader(req.user) ? (data.dailySurveillance || []).filter((item) => seesAll(req.user) || ownsRecord(req.user, item))
         .map((item) => ({ id: item.id, title: "Giám sát phòng ngừa", by: item.submittedBy, at: item.submittedAt, status: "Đã ghi nhận", action: "Ghi nhận giám sát" })) : []),
     ].filter((item) => during(item.at, from, to)).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 8);
     res.json({
@@ -578,7 +612,7 @@ export function moduleRouter({ currentUser, audit }) {
     if (monthCount > 24) return res.status(400).json({ message: "Khoảng tổng hợp không được vượt quá 24 tháng." });
     const data = await readStore();
     const members = data.members.filter((member) => member.active && reportMemberTypes.includes(member.memberType) &&
-      (seesAll(req.user) || member.departmentCode === req.user.departmentCode));
+      (seesAll(req.user) || member.employeeCode === req.user.employeeCode));
     const months = Array.from({ length: monthCount }, (_, index) => {
       const month = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + index, 1));
       return month.toISOString().slice(0, 7);
@@ -732,6 +766,7 @@ export function moduleRouter({ currentUser, audit }) {
       };
       if (existing) Object.assign(existing, record, { versions: [...(versions || []), previous] });
       else data.weeklyReports.unshift(record);
+      notifyManagers(data, req.user, "đã gửi báo cáo tuần", "reports", { reportView: "weekly" });
       audit(data, req.user, "Gửi báo cáo tuần thành viên mạng lưới", "weeklyReport", record.id);
       return { status: 201, item: record };
     });
@@ -747,7 +782,7 @@ export function moduleRouter({ currentUser, audit }) {
     }
     const data = await readStore();
     const items = (data.caseReports || []).filter((item) =>
-      (seesAll(req.user) || item.departmentCode === req.user.departmentCode) &&
+      (seesAll(req.user) || ownsRecord(req.user, item)) &&
       during(item.date, from, to)
     ).sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.createdAt).localeCompare(String(a.createdAt)));
     const infectionTypes = ["urinary", "respiratory", "bloodstream", "surgical-wound"].map((type) => ({
@@ -846,18 +881,9 @@ export function moduleRouter({ currentUser, audit }) {
         createdAt: new Date().toISOString(),
       };
       data.caseReports.unshift(record);
-      if (["ksnk", "hospital"].includes(record.interventionNeeded)) {
-        const recipients = new Set((data.users || []).filter((user) => user.active &&
-          user.roles?.some((role) => ["KSNK_ADMIN", "NETWORK_LEAD", "NETWORK_DEPUTY", "NETWORK_SECRETARY"].includes(role)))
-          .map((user) => user.employeeCode).filter(Boolean));
-        for (const recipient of recipients) {
-          (data.notifications ||= []).unshift({
-            id: makeId("notice"), recipient, reportMonth: record.date.slice(0, 7),
-            text: `Bác sĩ cần ${record.interventionNeeded === "hospital" ? "phối hợp toàn viện" : "Khoa KSNK phối hợp"}: ${record.diagnosisName}`,
-            urgent: record.interventionNeeded === "hospital", at: record.createdAt,
-          });
-        }
-      }
+      notifyManagers(data, req.user, "đã gửi báo cáo ca bệnh", "reports", {
+        urgent: record.interventionNeeded === "hospital",
+      });
       audit(data, req.user, "Tạo phiếu ca bệnh KSNK", "caseReport", record.id);
       return record;
     });

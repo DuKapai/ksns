@@ -1,12 +1,13 @@
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, ElementRef, isDevMode, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
-import { HttpErrorResponse } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Subscription, forkJoin, of } from 'rxjs';
 import { ApiService, User } from '../core/api.service';
 
 interface Task { id: string; title: string; area: string; dueDate?: string; }
+interface DemoAccount { username: string; label: string; password: string; }
 interface Person { employeeCode: string; fullName: string; departmentName: string; }
 interface Context {
   canRecord: boolean; isNetworkReader: boolean; seesAll: boolean; canManage: boolean; reportDay: number;
@@ -19,8 +20,9 @@ interface Summary {
   departmentCompliance: { departmentCode: string; departmentName: string; area: string; total: number; met: number;
     notPerformed: number; rate: number | null }[];
   roleCompliance: { role: string; area: string; total: number; met: number; notPerformed: number; rate: number | null }[];
+  departmentReportCounts: { departmentCode: string; departmentName: string; type: string; count: number }[];
 }
-interface Notice { id: string; text: string; urgent: boolean; section: string; riskId?: string; recipient?: string; reportMonth?: string; }
+interface Notice { id: string; text: string; urgent: boolean; section: string; riskId?: string; recipient?: string; reportMonth?: string; reportView?: 'weekly'; }
 interface Overview {
   summary: Summary;
   work: {
@@ -147,6 +149,7 @@ export class ModuleComponent implements OnInit, OnDestroy {
   overview: Overview | null = null;
   section = 'dashboard';
   loading = true;
+  startupReady = false;
   saving = false;
   error = '';
   success = '';
@@ -206,6 +209,12 @@ export class ModuleComponent implements OnInit, OnDestroy {
   modal = '';
   selected: Issue | null = null;
   persona = 'doctor';
+  loginUsername = '';
+  loginPassword = '';
+  showLoginPassword = false;
+  demoAccounts: DemoAccount[] = [];
+  loginConnectionError = false;
+  demoLoginUrl = '';
   private weeklyFormPeriod = '';
   manageView = 'members';
   reportDay = 5;
@@ -232,17 +241,13 @@ export class ModuleComponent implements OnInit, OnDestroy {
   readonly filters = [{ value: '', label: 'Tất cả' }, { value: 'new', label: 'Chờ tiếp nhận' }, { value: 'processing', label: 'Đang xử lý' },
     { value: 'waiting', label: 'Chờ xác nhận' }, { value: 'overdue', label: 'Quá hạn' }, { value: 'done', label: 'Hoàn thành' }];
   readonly memberTypes = ['Bác sĩ', 'Điều dưỡng', 'Hộ sinh', 'Kỹ thuật y', 'Lãnh đạo đơn vị', 'KSNK'];
-  readonly personas = [
-    { value: 'member', label: 'Thành viên mạng lưới' },
-    { value: 'doctor', label: 'Bác sĩ' },
-    { value: 'ksnk', label: 'Khoa KSNK' },
-  ];
   readonly stepLabel: Record<Step, string> = { respond: 'Phản hồi', accept: 'Tiếp nhận', correct: 'Báo đã xử lý', verify: 'Xác nhận kết quả' };
   private subscriptions = new Subscription();
   private dataRequest?: Subscription;
   private summaryRequest?: Subscription;
   private listRequest?: Subscription;
   private refreshTimer?: ReturnType<typeof setInterval>;
+  private startupTimer?: ReturnType<typeof setTimeout>;
   private dialog?: HTMLDialogElement;
 
   @ViewChild('formDialog') set formDialog(element: ElementRef<HTMLDialogElement> | undefined) {
@@ -250,9 +255,38 @@ export class ModuleComponent implements OnInit, OnDestroy {
     if (this.dialog && !this.dialog.open) this.dialog.showModal();
   }
 
-  constructor(private api: ApiService, private route: ActivatedRoute, private router: Router) {}
+  constructor(private api: ApiService, private http: HttpClient, private route: ActivatedRoute, private router: Router) {}
 
   ngOnInit(): void {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      this.startupReady = true;
+    } else {
+      this.startupTimer = setTimeout(() => this.startupReady = true, Math.max(0, 750 - performance.now()));
+    }
+    this.subscriptions.add(this.api.get<{ accounts: DemoAccount[] }>('/auth/demo-accounts').subscribe({
+      next: (result) => {
+        this.demoAccounts = result.accounts;
+        const selected = result.accounts.find((account) => account.username === this.route.snapshot.queryParamMap.get('demo'));
+        if (selected) this.fillDemoAccount(selected);
+      },
+      error: () => {
+        this.loginConnectionError = true;
+        if (isDevMode() && window.location.protocol === 'http:' && window.location.port === '4200' &&
+            ['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+          const origin = `http://${window.location.hostname}:3000`;
+          this.subscriptions.add(this.http.get<{ accounts: DemoAccount[] }>(
+            `${origin}/api/auth/demo-accounts`).subscribe({
+            next: (result) => {
+              if (Array.isArray(result.accounts) && result.accounts.length) {
+                this.demoAccounts = result.accounts;
+                this.demoLoginUrl = `${origin}/app/dashboard`;
+              }
+            },
+            error: (error: HttpErrorResponse) => console.warn('Không thể tải tài khoản demo từ máy chủ cục bộ:', error.message),
+          }));
+        }
+      },
+    }));
     this.subscriptions.add(this.route.paramMap.subscribe((params) => {
       const requested = params.get('section') || 'dashboard';
       const section = OLD_LINKS[requested] || requested;
@@ -266,39 +300,60 @@ export class ModuleComponent implements OnInit, OnDestroy {
       if (this.context) { if (this.allowed(section)) this.load(); else this.go('dashboard', {}, true); }
     }));
     this.subscriptions.add(this.route.queryParamMap.subscribe((query) => this.readQuery(query)));
-    if (this.api.token) {
-      this.subscriptions.add(this.api.get<{ user: User }>('/auth/me').subscribe({
-        next: (result) => this.ready(result.user),
-        error: (error: HttpErrorResponse) => {
-          if (error.status === 401) { this.api.logout(); this.enterDemo(); }
-          else { this.loading = false; this.fail(error); }
-        },
-      }));
-    } else this.enterDemo();
+    this.subscriptions.add(this.api.restoreSession().subscribe({
+      next: (result) => this.ready(result.user),
+      error: (error: HttpErrorResponse) => {
+        if (error.status === 401) {
+          if (this.api.usesHospitalSession) this.api.logout();
+          this.restoreLocalSession();
+        }
+        else { this.loading = false; this.fail(error); }
+      },
+    }));
     this.refreshTimer = setInterval(() => {
       if (this.context && !this.modal && !this.loading && !this.saving) this.load(false);
     }, 60000);
   }
+  demoAccountLink(account: DemoAccount): string {
+    return this.demoLoginUrl ? `${this.demoLoginUrl}?demo=${encodeURIComponent(account.username)}` : '#';
+  }
+  selectDemoAccount(event: MouseEvent, account: DemoAccount): void {
+    if (this.demoLoginUrl) return;
+    event.preventDefault();
+    this.fillDemoAccount(account);
+  }
+  private fillDemoAccount(account: DemoAccount): void {
+    this.loginUsername = account.username;
+    this.loginPassword = account.password;
+  }
+  private restoreLocalSession(): void {
+    if (this.api.token) {
+      this.subscriptions.add(this.api.get<{ user: User }>('/auth/me').subscribe({
+        next: (result) => this.ready(result.user),
+        error: (error: HttpErrorResponse) => {
+          if (error.status === 401) { this.api.logout(); this.loading = false; this.error = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'; }
+          else { this.loading = false; this.fail(error); }
+        },
+      }));
+    } else this.loading = false;
+  }
   ngOnDestroy(): void {
     this.subscriptions.unsubscribe(); this.dataRequest?.unsubscribe(); this.summaryRequest?.unsubscribe(); this.listRequest?.unsubscribe();
     if (this.refreshTimer) clearInterval(this.refreshTimer);
+    if (this.startupTimer) clearTimeout(this.startupTimer);
   }
 
   get canRecord(): boolean { return this.context?.canRecord ?? false; }
   get isReader(): boolean { return this.context?.isNetworkReader ?? false; }
   get canManage(): boolean { return this.context?.canManage ?? false; }
-  get demoRoleLabel(): string {
-    return this.hasRole('MEMBER_DOCTOR') ? 'Bác sĩ' : this.hasRole('MEMBER_NURSE') ? 'Điều dưỡng' : 'Khoa KSNK';
-  }
-  get canCreateCaseReport(): boolean { return this.canRecord && this.hasRole('MEMBER_DOCTOR'); }
+  get canCreateCaseReport(): boolean { return this.canRecord && this.hasRole('MEMBER_DOCTOR') && !this.context?.seesAll; }
   get canReadCaseReports(): boolean { return this.hasRole('MEMBER_DOCTOR') || Boolean(this.context?.seesAll); }
   get canSubmitWeeklyReport(): boolean {
     return this.canRecord && this.hasRole('MEMBER_DOCTOR', 'MEMBER_NURSE', 'NETWORK_MEMBER', 'DEPARTMENT_HEAD');
   }
   get isNurse(): boolean { return this.hasRole('MEMBER_NURSE'); }
-  get isDemo(): boolean { return localStorage.getItem('ksnk_demo') === 'true'; }
   get canReadLog(): boolean { return this.hasRole('KSNK_ADMIN', 'NETWORK_LEAD', 'NETWORK_SECRETARY'); }
-  get canFollowReports(): boolean { return Boolean(this.context?.seesAll) || this.hasRole('DEPARTMENT_HEAD'); }
+  get canFollowReports(): boolean { return Boolean(this.context?.seesAll); }
   get weeklyRangeValid(): boolean {
     if (!this.weekFrom || !this.weekTo || this.weekTo > this.today) return false;
     return Date.parse(`${this.weekTo}T00:00:00Z`) - Date.parse(`${this.weekFrom}T00:00:00Z`) === 6 * 86400000;
@@ -311,13 +366,12 @@ export class ModuleComponent implements OnInit, OnDestroy {
       (this.weeklyReportGroup === 'doctors' ? report.memberType === 'Bác sĩ' : report.memberType !== 'Bác sĩ'));
   }
   get selectedWeeklySummary(): Summary | null {
-    if (this.weeklyReportGroup === 'all' && this.canFollowReports && !this.weeklyReportReadiness?.complete) return null;
     return this.weeklySummaries?.[this.weeklyReportGroup as 'all' | 'doctors' | 'members'] || null;
   }
   get title(): string {
     if (this.section === 'dashboard') {
       return this.persona === 'doctor' ? 'Công việc bác sĩ' :
-        this.persona === 'member' ? 'Công việc thành viên mạng lưới' : 'Trang chủ';
+        this.persona === 'member' ? `Công việc ${this.user?.position || 'thành viên mạng lưới'}` : 'Trang chủ';
     }
     return ({ dashboard: 'Trang chủ', risks: 'Phiếu', monitorings: 'Phiếu', reports: 'Báo cáo', manage: 'Quản lý' } as Record<string, string>)[this.section];
   }
@@ -453,26 +507,28 @@ export class ModuleComponent implements OnInit, OnDestroy {
     } as Record<string, string>)[this.modal] || '';
   }
 
-  switchPersona(persona: string): void {
-    this.dataRequest?.unsubscribe(); this.listRequest?.unsubscribe(); this.summaryRequest?.unsubscribe();
-    this.context = null; this.overview = null; this.issues = []; this.todos = []; this.success = '';
-    this.reportView = 'weekly'; this.customDepartmentCode = ''; this.aggregateReport = null;
-    this.reports = []; this.reportReadiness = null; this.weeklyReports = []; this.weeklyReportReadiness = null;
-    this.weeklySummaries = null; this.weeklyCaseReports = []; this.weeklyCaseReportSummary = null;
-    this.weeklyFormPeriod = ''; this.caseReports = []; this.caseReportSummary = null;
-    this.monitorings = []; this.members = []; this.logs = []; this.reportSummary = null;
-    this.showNotices = false; this.focusId = '';
-    this.go('dashboard'); this.enterDemo(persona);
-  }
-  enterDemo(persona = 'doctor'): void {
+  login(): void {
     this.loading = true; this.error = '';
-    this.subscriptions.add(this.api.demoSession(persona).subscribe({
-      next: (result) => this.ready(result.user),
+    this.subscriptions.add(this.api.login(this.loginUsername.trim(), this.loginPassword).subscribe({
+      next: (result) => { this.loginPassword = ''; this.showLoginPassword = false; this.ready(result.user); },
       error: (error: HttpErrorResponse) => {
         this.loading = false;
-        this.error = error.status === 403 ? 'Vui lòng mở chức năng KSNK từ ứng dụng MyHV.' : error.error?.message || 'Không mở được KSNK.';
+        this.error = error.error?.message || 'Không thể đăng nhập. Kiểm tra kết nối máy chủ.';
       },
     }));
+  }
+  logout(): void {
+    this.dataRequest?.unsubscribe(); this.listRequest?.unsubscribe(); this.summaryRequest?.unsubscribe();
+    this.api.logout(); this.user = null; this.context = null; this.overview = null;
+    this.issues = []; this.monitorings = []; this.reports = []; this.weeklyReports = [];
+    this.caseReports = []; this.weeklyCaseReports = []; this.members = []; this.logs = [];
+    this.reportSummary = null; this.reportReadiness = null; this.weeklyReportReadiness = null;
+    this.weeklySummaries = null; this.caseReportSummary = null; this.weeklyCaseReportSummary = null;
+    this.aggregateReport = null; this.weeklyForm = this.newWeeklyReport(); this.weeklyFormPeriod = '';
+    this.recommendation = ''; this.search = ''; this.focusId = ''; this.reportView = 'weekly';
+    this.todos = []; this.error = ''; this.success = ''; this.loginPassword = ''; this.showLoginPassword = false;
+    this.modal = ''; this.showNotices = false;
+    this.go('dashboard', {}, true);
   }
   private ready(user: User): void {
     this.user = user;
@@ -480,9 +536,8 @@ export class ModuleComponent implements OnInit, OnDestroy {
       user.roles.includes('MEMBER_NURSE') || user.roles.includes('NETWORK_MEMBER') ||
       user.roles.includes('DEPARTMENT_HEAD') ? 'members' : 'all';
     this.readQuery(this.route.snapshot.queryParamMap);
-    this.persona = user.roles.includes('MEMBER_DOCTOR') ? 'doctor' :
-      user.roles.some((role) => ['KSNK_ADMIN', 'NETWORK_LEAD', 'NETWORK_DEPUTY', 'NETWORK_SECRETARY'].includes(role))
-        ? 'ksnk' : 'member';
+    this.persona = user.roles.some((role) => ['KSNK_ADMIN', 'NETWORK_LEAD', 'NETWORK_DEPUTY', 'NETWORK_SECRETARY'].includes(role))
+      ? 'ksnk' : user.roles.includes('MEMBER_DOCTOR') ? 'doctor' : 'member';
     localStorage.setItem('ksnk_user', JSON.stringify(user));
     this.subscriptions.add(this.api.get<Context>('/module/context').subscribe({
       next: (context) => {
@@ -753,7 +808,7 @@ export class ModuleComponent implements OnInit, OnDestroy {
   open(modal: string): void { this.modal = modal; this.error = ''; this.success = ''; }
   close(): void { if (!this.saving) { this.dialog?.close(); this.modal = ''; this.error = ''; } }
   cancelDialog(event: Event): void { event.preventDefault(); this.close(); }
-  openReport(month: string): void { this.go('reports', { month }); }
+  openReport(month: string): void { this.reportView = 'monthly'; this.go('reports', { month }); }
 
   saveMonitoring(): void { this.submit('/monitorings', this.monitoringForm, 'Đã lưu giám sát.'); }
   saveIssue(): void { this.submit('/risks', this.issueForm, 'Đã gửi vấn đề.'); }
@@ -848,6 +903,10 @@ export class ModuleComponent implements OnInit, OnDestroy {
     this.showNotices = false;
     if (notice.reportMonth) this.openReport(notice.reportMonth);
     else if (notice.riskId) this.go('risks', { issue: notice.riskId });
+    else if (SECTIONS.includes(notice.section)) {
+      if (notice.reportView) this.reportView = notice.reportView;
+      this.go(notice.section);
+    }
     // Opening an issue clears every unread personal notice about that issue.
     const unread = this.notices.filter((item) => item.recipient && (item.id === notice.id || (notice.riskId && item.riskId === notice.riskId)));
     for (const item of unread) this.subscriptions.add(this.api.patch(`/module/notifications/${item.id}/read`, {}).subscribe({
@@ -959,11 +1018,6 @@ export class ModuleComponent implements OnInit, OnDestroy {
   }
   exportReport(): void {
     if (!this.overview) return;
-    if (this.section === 'reports' && this.reportGroup === 'all' && this.canFollowReports &&
-        (!this.reportReadiness || !this.reportReadiness.complete)) {
-      this.error = 'Chưa đủ báo cáo của bác sĩ và các thành viên mạng lưới khác để xuất báo cáo tổng hợp.';
-      return;
-    }
     const summary = this.overview.summary;
     const rows: (string | number)[][] = this.section === 'reports' ?
       [['Từ tháng', this.reportFromMonth, 'Đến tháng', this.reportToMonth],
@@ -987,7 +1041,7 @@ export class ModuleComponent implements OnInit, OnDestroy {
         'Tỷ lệ làm đúng (%)', 'Số vấn đề', 'Tỷ lệ trên tổng vấn đề (%)', 'Đã xử lý xong', 'Tỷ lệ xử lý xong (%)'],
       ...this.stats.map((row) => [row.name, row.met, row.checked, row.checked - row.met - row.notPerformed,
         row.notPerformed, row.rate ?? '', row.issues, row.share ?? '', row.closed, row.closedRate ?? '']),
-      ['Tổng', '', '', '', summary.risksFound, summary.risksFound ? 100 : '', summary.risksClosed, summary.closureRate ?? '']];
+      ['Tổng', '', '', '', '', '', summary.risksFound, summary.risksFound ? 100 : '', summary.risksClosed, summary.closureRate ?? '']];
     const sheets = [{ name: 'Báo cáo mạng lưới', rows }];
     if (this.section === 'reports' && this.reportGroup !== 'members' && this.caseReportSummary) {
       sheets.push({ name: 'Tổng hợp ca bệnh', rows: this.caseReportSummaryRows() });
@@ -1017,6 +1071,10 @@ export class ModuleComponent implements OnInit, OnDestroy {
       ] });
     }
     if (this.section !== 'reports') {
+      sheets.push({ name: 'Số phiếu theo khoa', rows: [
+        ['Khoa/phòng', 'Loại', 'Số phiếu'],
+        ...summary.departmentReportCounts.map((item) => [item.departmentName, item.type, item.count]),
+      ] });
       sheets.push({ name: 'Theo khoa', rows: [
         ['Khoa/phòng', 'Nội dung', 'Tổng cơ hội quan sát', 'Đúng', 'Thực hiện chưa đúng', 'Không VST', 'Tỷ lệ đúng (%)'],
         ...summary.departmentCompliance.map((item) => [item.departmentName, item.area, item.total, item.met,
@@ -1045,11 +1103,6 @@ export class ModuleComponent implements OnInit, OnDestroy {
     const summary = this.selectedWeeklySummary;
     if (!this.weeklyRangeValid || !summary) {
       this.error = 'Chọn đúng tuần và chờ tải đủ số liệu trước khi xuất.';
-      return;
-    }
-    if (this.weeklyReportGroup === 'all' && this.canFollowReports &&
-        (!this.weeklyReportReadiness || !this.weeklyReportReadiness.complete)) {
-      this.error = 'Chưa đủ báo cáo tuần của bác sĩ và thành viên mạng lưới khác để xuất báo cáo tổng hợp.';
       return;
     }
     const groupLabel = this.weeklyReportGroup === 'all' ? 'Tất cả mạng lưới' :

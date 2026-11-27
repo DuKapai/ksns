@@ -5,10 +5,9 @@
   "description": "Demo he thong quan ly Mang luoi Kiem soat nhiem khuan",
   "scripts": {
     "install:all": "npm --prefix server install && npm --prefix client install",
-    "dev": "concurrently \"npm --prefix server run demo\" \"npm --prefix client start\"",
+    "dev": "concurrently \"npm --prefix server run dev\" \"npm --prefix client start\"",
     "build": "npm --prefix client run build",
-    "build:pages": "npm --prefix client run build:pages",
-    "test:pages": "npm --prefix client run test:pages",
+    "test": "npm --prefix server test",
     "start": "npm --prefix server start"
   },
   "devDependencies": {"concurrently": "^9.1.2"}

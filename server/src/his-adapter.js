@@ -1,10 +1,3 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const here = path.dirname(fileURLToPath(import.meta.url));
-const assignmentsPath = path.resolve(here, '../data/role-assignments.json');
-
 function getPath(object, dottedPath) {
   if (!dottedPath) return undefined;
   return dottedPath.split('.').reduce((value, key) => value == null ? undefined : value[key], object);
@@ -76,6 +69,36 @@ export async function loginWithHospitalApi(username, password, options = {}) {
     profileData = await profileResponse.json();
   }
 
+  return mapHospitalProfile(profileData, username, employeeCookieProtocol, options.assignments);
+}
+
+export async function restoreHospitalSession(cookieHeader, options = {}) {
+  const session = String(cookieHeader || '').split(';').map(part => part.trim())
+    .find(part => /^irw_session=[A-Za-z0-9_-]+$/.test(part));
+  if (!session) {
+    const error = new Error('Không có phiên MyHV.');
+    error.status = 401;
+    throw error;
+  }
+  const base = process.env.HIS_API_BASE_URL;
+  if (!base || base.includes('replace-with-approved-api-host')) throw new Error('Chưa cấu hình HIS_API_BASE_URL.');
+  const url = new URL(process.env.HIS_SESSION_PATH || '/api/me', base);
+  if (url.origin !== new URL(base).origin) throw new Error('HIS_SESSION_PATH phải cùng nguồn với HIS_API_BASE_URL.');
+  const response = await (options.fetchImpl || fetch)(url, {
+    headers: { accept: 'application/json', cookie: session },
+    redirect: 'error',
+    signal: AbortSignal.timeout(Number(process.env.HIS_API_TIMEOUT_MS || 10000)),
+  });
+  if (!response.ok) {
+    const error = new Error('Không xác thực được phiên MyHV.');
+    error.status = response.status;
+    throw error;
+  }
+  const profile = await response.json();
+  return mapHospitalProfile(profile, String(profile.manv || ''), true, options.assignments);
+}
+
+async function mapHospitalProfile(profileData, username, employeeCookieProtocol, suppliedAssignments) {
   const profilePath = (setting, cookiePath, tokenPath) =>
     process.env[setting] || (employeeCookieProtocol ? cookiePath : tokenPath);
   const profile = {
@@ -91,7 +114,10 @@ export async function loginWithHospitalApi(username, password, options = {}) {
     throw new Error('Hồ sơ HIS thiếu mã nhân viên, họ tên hoặc khoa/phòng; hãy kiểm tra mapping.');
   }
 
-  const assignments = options.assignments || JSON.parse(await fs.readFile(assignmentsPath, 'utf8'));
+  const assignments = suppliedAssignments || JSON.parse(process.env.HIS_ROLE_ASSIGNMENTS || '{}');
+  if (!assignments || typeof assignments !== 'object' || Array.isArray(assignments)) {
+    throw new Error('HIS_ROLE_ASSIGNMENTS phải là đối tượng JSON.');
+  }
   const assignment = assignments[String(profile.employeeCode)];
   const assignedRoles = Array.isArray(assignment?.roles)
     ? assignment.roles.filter((role) => ALLOWED_ROLES.has(role))

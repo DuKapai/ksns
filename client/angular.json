@@ -21,13 +21,12 @@
             "styles": ["src/styles.css"]
           },
           "configurations": {
-            "production": {"budgets":[{"type":"initial","maximumWarning":"1.5MB","maximumError":"3MB"}],"outputHashing":"all"},
-            "development": {"optimization":false,"extractLicenses":false,"sourceMap":true},
-            "pages": {"browser":"src/main-pages.ts","index":{"input":"src/index-pages.html","output":"index.html"},"tsConfig":"tsconfig.pages.json","outputPath":"dist/ksnk-pages"}
+            "production": {"budgets":[{"type":"initial","maximumWarning":"1.5MB","maximumError":"3MB"}],"outputHashing":"all","optimization":{"scripts":true,"styles":{"minify":true,"inlineCritical":false},"fonts":true}},
+            "development": {"optimization":false,"extractLicenses":false,"sourceMap":true}
           },
           "defaultConfiguration": "production"
         },
-        "serve": {"builder":"@angular/build:dev-server","configurations":{"production":{"buildTarget":"ksnk-demo:build:production"},"development":{"buildTarget":"ksnk-demo:build:development"}},"defaultConfiguration":"development"}
+        "serve": {"builder":"@angular/build:dev-server","options":{"proxyConfig":"proxy.conf.cjs"},"configurations":{"production":{"buildTarget":"ksnk-demo:build:production"},"development":{"buildTarget":"ksnk-demo:build:development"}},"defaultConfiguration":"development"}
       }
     }
   },

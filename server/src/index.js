@@ -3,12 +3,15 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { readStore, updateStore, makeId } from "./store.js";
 import { doctorRouter } from "./doctor.js";
 import { surveillanceRouter } from "./surveillance.js";
 import { readDepartments } from "./departments.js";
 import { validDate, validDateTime, validMonth } from "./validation.js";
-import { moduleRouter, requireRecorder, requireNetworkReader, visibleRisk, monthlySummary, vietnamDate } from "./module.js";
+import { loginWithHospitalApi, restoreHospitalSession } from "./his-adapter.js";
+import { moduleRouter, requireRecorder, requireNetworkReader, visibleRisk, ownsRecord, notifyManagers, monthlySummary, vietnamDate } from "./module.js";
 import {
   authenticateToken,
   constantTimeEqual,
@@ -28,7 +31,7 @@ const allowedOrigins = [...new Set([...configuredOrigins, ...localOrigins])];
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
-app.use(cors({ origin: allowedOrigins, credentials: false }));
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
 
 // =====================================================
@@ -44,7 +47,7 @@ app.get("/api/health", (_req, res) =>
   res.json({
     ok: true,
     service: "ksnk-network-api",
-    mode: "demo",
+    mode: process.env.AUTH_MODE || "demo",
   }),
 );
 
@@ -123,6 +126,43 @@ const audit = (data, user, action, entity, entityId) => {
 // 4. ĐĂNG NHẬP DEMO
 // =====================================================
 
+app.get("/api/auth/demo-accounts", asyncRoute(async (_req, res) => {
+  if (process.env.NODE_ENV === "production" || (process.env.AUTH_MODE && process.env.AUTH_MODE !== "demo")) {
+    return res.json({ accounts: [] });
+  }
+  const examples = [
+    { username: "bs.nguyen", label: "Bác sĩ" },
+    { username: "dd.tran", label: "Điều dưỡng" },
+    { username: "ksnk.admin", label: "Khoa KSNK" },
+  ];
+  const data = await readStore();
+  const accounts = examples.filter(({ username }) => data.users.some((user) =>
+    user.username === username && user.active && constantTimeEqual(user.password, "Demo@123")));
+  return res.json({ accounts: accounts.map((account) => ({ ...account, password: "Demo@123" })) });
+}));
+
+async function saveHospitalUser(user) {
+  await updateStore((data) => {
+    const existing = data.users.find((item) => item.id === user.id);
+    if (existing) Object.assign(existing, user);
+    else data.users.push(user);
+  });
+}
+
+app.post("/api/auth/session", asyncRoute(async (req, res) => {
+  if (process.env.AUTH_MODE !== "hospital") return res.status(401).json({ message: "Không có phiên MyHV." });
+  try {
+    const user = await restoreHospitalSession(req.headers.cookie);
+    await saveHospitalUser(user);
+    res.json({ token: issueToken(user), user: safeUser(user) });
+  } catch (error) {
+    if (error.code === "ROLE_ASSIGNMENT_MISSING") return res.status(403).json({ message: error.message });
+    if (error.status === 401 || error.status === 403) return res.status(401).json({ message: "Phiên MyHV không hợp lệ hoặc đã hết hạn." });
+    console.error("HIS session error:", error.message);
+    res.status(502).json({ message: "Không thể kiểm tra phiên MyHV. Kiểm tra cấu hình và kết nối." });
+  }
+}));
+
 app.post("/api/auth/login", async (req, res) => {
   try {
     const { username, password, portal } = req.body || {};
@@ -132,6 +172,22 @@ app.post("/api/auth/login", async (req, res) => {
       return res.status(400).json({
         message: "Vui lòng nhập tên đăng nhập và mật khẩu.",
       });
+    }
+
+    if (process.env.AUTH_MODE && !["demo", "hospital"].includes(process.env.AUTH_MODE)) {
+      return res.status(503).json({ message: "AUTH_MODE không hợp lệ; liên hệ quản trị hệ thống." });
+    }
+    if (process.env.AUTH_MODE === "hospital") {
+      try {
+        const user = await loginWithHospitalApi(username.trim(), password);
+        await saveHospitalUser(user);
+        return res.json({ token: issueToken(user), user: safeUser(user) });
+      } catch (error) {
+        if (error.code === "ROLE_ASSIGNMENT_MISSING") return res.status(403).json({ message: error.message });
+        if (error.status === 401 || error.status === 403) return res.status(401).json({ message: "Tên đăng nhập hoặc mật khẩu không đúng." });
+        console.error("HIS login error:", error.message);
+        return res.status(502).json({ message: "Không thể xác thực với hệ thống bệnh viện. Kiểm tra cấu hình và kết nối." });
+      }
     }
 
     const portalRoles = {
@@ -183,26 +239,6 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-app.post("/api/auth/demo-session", asyncRoute(async (req, res) => {
-  if (process.env.DEMO_AUTO_LOGIN !== "true" || process.env.NODE_ENV === "production") {
-    return res.status(403).json({ message: "Chưa có phiên MyHV. Bản dùng thử cần bật DEMO_AUTO_LOGIN=true ở máy chủ." });
-  }
-  const accounts = {
-    doctor: "DEMO-BS-001",
-    member: "DEMO-DD-001",
-    nurse: "DEMO-DD-001",
-    staff: "DEMO-NV-001",
-    ksnk: "DEMO-KSNK-001",
-  };
-  const persona = req.body?.persona || "member";
-  if (!Object.hasOwn(accounts, persona)) return res.status(400).json({ message: "Tài khoản mẫu không hợp lệ." });
-  const data = await readStore();
-  const user = data.users.find((item) => item.active && item.employeeCode === accounts[persona] &&
-    (persona !== "ksnk" || item.roles.includes("KSNK_ADMIN")));
-  if (!user) return res.status(404).json({ message: "Không có tài khoản mẫu trong dữ liệu hiện tại." });
-  res.json({ token: issueToken(user), user: safeUser(user), demo: true });
-}));
-
 // =====================================================
 // 5. THÔNG TIN TÀI KHOẢN ĐANG ĐĂNG NHẬP
 // =====================================================
@@ -224,6 +260,7 @@ app.get("/api/departments", currentUser, async (_req, res, next) => {
 // =====================================================
 
 app.get("/api/dashboard", currentUser, requireNetworkReader, async (req, res) => {
+  if (!canSeeAll(req.user)) return res.status(403).json({ message: "Chỉ Khoa KSNK được xem tổng quan." });
   const data = await readStore();
 
   const admin = canSeeAll(req.user);
@@ -298,7 +335,7 @@ app.get("/api/monitorings", currentUser, requireNetworkReader, async (req, res) 
 
   const items = data.monitorings
     .filter((x) =>
-      sameDepartmentOrAdmin(req, x.departmentCode),
+      canSeeAll(req.user) || ownsRecord(req.user, x, "observerEmployeeCode"),
     )
     .sort((a, b) => b.date.localeCompare(a.date));
 
@@ -399,6 +436,7 @@ app.post(
       };
 
       data.monitorings.unshift(record);
+      notifyManagers(data, req.user, "đã gửi phiếu giám sát", "monitorings");
 
       audit(
         data,
@@ -527,11 +565,7 @@ app.post(
       };
 
       data.risks.unshift(record);
-      if (subject) (data.notifications ||= []).unshift({
-        id: makeId("notice"), recipient: subject.employeeCode, riskId: record.id,
-        text: `Bạn có phiếu cần xem: ${record.title}`,
-        urgent: record.severity === "Cao", at: now,
-      });
+      notifyManagers(data, req.user, "đã ghi nhận vấn đề", "risks", { riskId: record.id, urgent: record.severity === "Cao" });
 
       audit(
         data,
@@ -568,7 +602,7 @@ app.patch("/api/risks/:id", currentUser, requireNetworkReader, async (req, res) 
       return { error: "Không tìm thấy nguy cơ.", status: 404 };
     }
 
-    if (!sameDepartmentOrAdmin(req, item.departmentCode)) {
+    if (!canSeeAll(req.user) && !ownsRecord(req.user, item)) {
       return { forbidden: true };
     }
 
@@ -728,7 +762,7 @@ app.get("/api/reports", currentUser, requireNetworkReader, async (req, res) => {
   res.json({
     items: [...monthlyReports, ...doctorReports]
       .filter((x) =>
-        sameDepartmentOrAdmin(req, x.departmentCode),
+        canSeeAll(req.user) || ownsRecord(req.user, x),
       )
       .sort((a, b) => b.month.localeCompare(a.month)),
   });
@@ -782,6 +816,7 @@ app.post(
         const { versions, ...previous } = existing;
         Object.assign(existing, record, { versions: [...(versions || []), previous] });
       } else data.monthlyReports.unshift(record);
+      notifyManagers(data, req.user, "đã gửi báo cáo tháng", "reports", { reportMonth: record.month });
 
       audit(
         data,
@@ -930,6 +965,15 @@ app.use("/api/module", moduleRouter({ currentUser, audit }));
 app.use("/api/doctor", currentUser, requireNetworkReader, doctorRouter({ currentUser, hasRole, sameDepartmentOrAdmin, audit }));
 app.use("/api/surveillance", currentUser, requireNetworkReader, surveillanceRouter({ currentUser, hasRole, audit }));
 
+const frontendPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../client/dist/ksnk-demo/browser");
+app.use(express.static(frontendPath));
+app.get(/^\/(?!api(?:\/|$)).*/, (req, res, next) => {
+  if (!req.accepts("html")) return next();
+  res.sendFile(path.join(frontendPath, "index.html"), (error) => {
+    if (error) next(error);
+  });
+});
+
 app.use((err, _req, res, _next) => {
   console.error("API error:", err.message);
 
@@ -942,11 +986,11 @@ app.use((err, _req, res, _next) => {
 // 15. KHỞI ĐỘNG SERVER
 // =====================================================
 
-app.listen(port, process.env.DEMO_AUTO_LOGIN === "true" ? "127.0.0.1" : undefined, () => {
+if (process.env.AUTH_MODE === "hospital") await readStore();
+app.listen(port, () => {
   console.log("-----------------------------------------");
   console.log("KSNK NETWORK API");
   console.log(`Địa chỉ: http://localhost:${port}`);
-  console.log("Chế độ: DEMO");
-  console.log("Đăng nhập: tài khoản trong dữ liệu demo");
+  console.log(`Chế độ xác thực: ${process.env.AUTH_MODE || "demo"}`);
   console.log("-----------------------------------------");
 });

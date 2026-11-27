@@ -7,7 +7,7 @@ export interface User {
   departmentCode: string; departmentName: string; roles: string[]; active: boolean;
 }
 
-export const API_BASE = new InjectionToken<string>('API_BASE', { providedIn: 'root', factory: () => 'http://localhost:3000/api' });
+export const API_BASE = new InjectionToken<string>('API_BASE', { providedIn: 'root', factory: () => '/api' });
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -15,12 +15,22 @@ export class ApiService {
   get token(): string { return localStorage.getItem('ksnk_token') || ''; }
   get user(): User | null { try { return JSON.parse(localStorage.getItem('ksnk_user') || 'null') as User | null; } catch { return null; } }
   headers(): HttpHeaders { return new HttpHeaders({ Authorization: `Bearer ${this.token}` }); }
-  logout(): void { localStorage.removeItem('ksnk_token'); localStorage.removeItem('ksnk_user'); localStorage.removeItem('ksnk_portal'); localStorage.removeItem('ksnk_demo'); }
-  demoSession(persona = 'member'): Observable<{ token: string; user: User; demo: boolean }> {
-    return this.http.post<{ token: string; user: User; demo: boolean }>(`${this.base}/auth/demo-session`, { persona }).pipe(tap(result => {
+  logout(): void { localStorage.removeItem('ksnk_token'); localStorage.removeItem('ksnk_user'); localStorage.removeItem('ksnk_portal'); localStorage.removeItem('ksnk_demo'); localStorage.removeItem('ksnk_session_source'); }
+  get usesHospitalSession(): boolean { return localStorage.getItem('ksnk_session_source') === 'myhv'; }
+  login(username: string, password: string): Observable<{ token: string; user: User }> {
+    return this.http.post<{ token: string; user: User }>(`${this.base}/auth/login`, { username, password }).pipe(tap(result => {
       localStorage.setItem('ksnk_token', result.token);
       localStorage.setItem('ksnk_user', JSON.stringify(result.user));
-      localStorage.setItem('ksnk_demo', 'true');
+      localStorage.removeItem('ksnk_demo');
+      localStorage.removeItem('ksnk_session_source');
+    }));
+  }
+  restoreSession(): Observable<{ token: string; user: User }> {
+    return this.http.post<{ token: string; user: User }>(`${this.base}/auth/session`, {}, { withCredentials: true }).pipe(tap(result => {
+      localStorage.setItem('ksnk_token', result.token);
+      localStorage.setItem('ksnk_user', JSON.stringify(result.user));
+      localStorage.removeItem('ksnk_demo');
+      localStorage.setItem('ksnk_session_source', 'myhv');
     }));
   }
   get<T>(path: string): Observable<T> { return this.http.get<T>(`${this.base}${path}`, { headers: this.headers() }); }

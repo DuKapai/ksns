@@ -1,1 +1,0 @@
-{"extends":"./tsconfig.app.json","files":["src/main-pages.ts"],"include":["src/**/*.d.ts","src/**/*.d.mts"]}

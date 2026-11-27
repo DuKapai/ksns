@@ -10,5 +10,4 @@ server/test/store-*.json
 server/test/surveillance-*.json
 server/test/module-*.json
 .tsupgrader/
-client/src/demo-api.generated.mjs
 .DS_Store

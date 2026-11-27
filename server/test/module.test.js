@@ -50,6 +50,8 @@ test("period totals use scoped records, correct denominators and null for no sam
       { departmentCode: "B", createdAt: "2024-02-02T10:00:00Z", category: "PPE", status: "Đã đóng" },
     ],
   };
+  for (const item of data.monitorings) if (item.departmentCode === "A") item.observerEmployeeCode = member.employeeCode;
+  for (const item of data.risks) if (item.departmentCode === "A") item.employeeCode = member.employeeCode;
   const summary = summarize(data, member, "2024-02-01", "2024-02-29");
   assert.equal(summary.monitoringCount, 3);
   assert.equal(summary.risksFound, 3);
@@ -68,6 +70,9 @@ test("simplified module persists notices, restricts responses and automatically 
   const file = path.join(serverDir, "test", `module-${randomUUID()}.json`);
   await writeFile(file, JSON.stringify({
     users: [member, nurse, colleague, genericMember, departmentHead, staff, other, admin,
+      { ...member, id: "hint-doctor", username: "bs.nguyen", password: "Demo@123" },
+      { ...nurse, id: "hint-nurse", username: "dd.tran", password: "Demo@123" },
+      { ...admin, id: "hint-admin", username: "ksnk.admin", password: "Demo@123" },
       { ...admin, id: "secretary", username: "secretary", roles: ["NETWORK_SECRETARY"] }],
     members: [{ ...member, memberType: "Bác sĩ" }, { ...nurse, memberType: "Điều dưỡng" }, { ...admin, memberType: "KSNK" },
       { ...colleague, memberType: "Điều dưỡng", active: true }, { ...genericMember, memberType: "Kỹ thuật y", active: true }],
@@ -85,7 +90,7 @@ test("simplified module persists notices, restricts responses and automatically 
   await new Promise((resolve) => listener.close(resolve));
   const child = spawn(process.execPath, ["src/index.js"], { cwd: serverDir,
     env: { ...process.env, DATA_FILE: file, PORT: String(port), CLIENT_ORIGIN: "http://localhost:4200",
-      DEMO_AUTO_LOGIN: "true", NODE_ENV: "test" },
+      AUTH_MODE: "demo", NODE_ENV: "test" },
     stdio: "ignore" });
   t.after(async () => {
     if (child.exitCode === null) { child.kill(); await new Promise((resolve) => child.once("exit", resolve)); }
@@ -96,12 +101,12 @@ test("simplified module persists notices, restricts responses and automatically 
     try { await fetch(`${base}/health`); break; }
     catch (error) { if (i === 100 || child.exitCode !== null) throw error; await new Promise((resolve) => setTimeout(resolve, 50)); }
   }
-  const corsPreflight = await fetch(`${base}/auth/demo-session`, { method: "OPTIONS", headers: {
+  const corsPreflight = await fetch(`${base}/auth/login`, { method: "OPTIONS", headers: {
     origin: "http://127.0.0.1:4200", "access-control-request-method": "POST",
     "access-control-request-headers": "content-type",
   } });
   assert.equal(corsPreflight.headers.get("access-control-allow-origin"), "http://127.0.0.1:4200");
-  const localhostPreflight = await fetch(`${base}/auth/demo-session`, { method: "OPTIONS", headers: {
+  const localhostPreflight = await fetch(`${base}/auth/login`, { method: "OPTIONS", headers: {
     origin: "http://localhost:4200", "access-control-request-method": "POST",
     "access-control-request-headers": "content-type",
   } });
@@ -113,17 +118,15 @@ test("simplified module persists notices, restricts responses and automatically 
     });
     return { status: result.status, body: await result.json() };
   }
-  const demoDoctor = await request("/auth/demo-session", null, { persona: "doctor" });
-  assert.equal(demoDoctor.body.user.employeeCode, member.employeeCode);
-  assert.ok(demoDoctor.body.user.roles.includes("MEMBER_DOCTOR"));
-  const doctor = demoDoctor.body.token;
-  const demoMember = await request("/auth/demo-session", null, { persona: "member" });
-  assert.equal(demoMember.body.user.employeeCode, nurse.employeeCode);
-  assert.ok(demoMember.body.user.roles.includes("MEMBER_NURSE"));
-  const demoNurse = await request("/auth/demo-session", null, { persona: "nurse" });
-  assert.equal(demoNurse.body.user.employeeCode, nurse.employeeCode);
-  assert.equal((await request("/module/context", demoNurse.body.token)).body.canRecord, true);
-  const ksnk = (await request("/auth/demo-session", null, { persona: "ksnk" })).body.token;
+  const hints = await request("/auth/demo-accounts");
+  assert.deepEqual(hints.body.accounts.map((account) => account.username), ["bs.nguyen", "dd.tran", "ksnk.admin"]);
+  for (const account of hints.body.accounts) {
+    const login = await request("/auth/login", null, { username: account.username, password: account.password });
+    assert.equal(login.status, 200);
+    assert.equal(login.body.user.username, account.username);
+  }
+  const doctor = (await request("/auth/login", null, { username: member.username, password: "test" })).body.token;
+  const ksnk = (await request("/auth/login", null, { username: admin.username, password: "test" })).body.token;
   const nurseToken = (await request("/auth/login", null, { username: nurse.username, password: "test" })).body.token;
   const colleagueToken = (await request("/auth/login", null, { username: colleague.username, password: "test" })).body.token;
   const genericTokenResponse = await request("/auth/login", null, {
@@ -135,10 +138,9 @@ test("simplified module persists notices, restricts responses and automatically 
   const departmentHeadToken = (await request("/auth/login", null, {
     username: departmentHead.username, password: "test",
   })).body.token;
-  const employee = (await request("/auth/demo-session", null, { persona: "staff" })).body.token;
+  const employee = (await request("/auth/login", null, { username: staff.username, password: "test" })).body.token;
   const unrelated = (await request("/auth/login", null, { username: "other", password: "test" })).body.token;
   assert.equal((await request("/module/context")).status, 401);
-  assert.equal((await request("/auth/demo-session", null, { persona: "arbitrary" })).status, 400);
   assert.equal((await request("/module/context", employee)).body.canRecord, false);
   assert.deepEqual((await request("/module/context", employee)).body.people, []);
   assert.equal((await request("/monitorings", employee)).status, 403);
@@ -154,18 +156,21 @@ test("simplified module persists notices, restricts responses and automatically 
   assert.equal(created.body.item.kind, "Sai sót");
   const id = created.body.item.id;
   assert.equal((await request("/module/issues", unrelated)).body.items.length, 0);
-  assert.equal((await request("/module/issues", employee)).body.items.find((item) => item.id === id).canRespond, true);
+  assert.equal((await request("/module/issues", nurseToken)).body.items.some((item) => item.id === id), false);
+  assert.equal((await request(`/risks/${id}`, nurseToken, { action: "correct", correction: "Other" }, "PATCH")).status, 403);
+  assert.equal((await request("/dashboard", nurseToken)).status, 403);
+  assert.equal((await request("/module/issues", employee)).body.items.some((item) => item.id === id), false);
   const reply = { explanation: "Demo explanation", evidence: "Demo reference" };
   assert.equal((await request(`/module/issues/${id}/responses`, unrelated, reply)).status, 404);
   assert.equal((await request(`/module/issues/${id}/responses`, doctor, reply)).status, 403);
-  assert.equal((await request("/module/issues/expired/responses", employee, reply)).status, 409);
+  assert.equal((await request("/module/issues/expired/responses", employee, reply)).status, 404);
   assert.equal((await request(`/module/issues/${id}/responses`, employee, { ...reply, evidence: "" })).status, 400);
-  assert.equal((await request(`/module/issues/${id}/responses`, employee, reply)).status, 201);
-  const overview = await request(`/module/overview?from=${month}-01&to=${vietnamDate()}`, employee);
-  const notification = overview.body.notices.find((notice) => notice.recipient === staff.employeeCode);
+  assert.equal((await request(`/module/issues/${id}/responses`, employee, reply)).status, 404);
+  const overview = await request(`/module/overview?from=${month}-01&to=${vietnamDate()}`, ksnk);
+  const notification = overview.body.notices.find((notice) => notice.recipient === admin.employeeCode && notice.riskId === id);
   assert.ok(notification);
   assert.equal((await request(`/module/notifications/${notification.id}/read`, unrelated, {}, "PATCH")).status, 404);
-  assert.equal((await request(`/module/notifications/${notification.id}/read`, employee, {}, "PATCH")).status, 200);
+  assert.equal((await request(`/module/notifications/${notification.id}/read`, ksnk, {}, "PATCH")).status, 200);
   assert.equal((await request("/module/overview?from=2024-02-30&to=2024-03-01", doctor)).status, 400);
   const monitoring = { date: `${month}-01`, area: "Hand hygiene", method: "Observation", findings: "Demo", sampleSize: 10, compliant: 8 };
   assert.equal((await request("/monitorings", doctor, monitoring)).status, 201);
@@ -178,6 +183,11 @@ test("simplified module persists notices, restricts responses and automatically 
   });
   assert.equal(noHandHygiene.status, 201);
   assert.equal(noHandHygiene.body.item.notPerformed, 1);
+  assert.equal((await request("/monitorings", doctor)).body.items.length, 1);
+  assert.equal((await request("/monitorings", ksnk)).body.items.length, 3);
+  const personalOverview = await request(`/module/overview?from=${month}-01&to=${vietnamDate()}`, doctor);
+  assert.equal(personalOverview.body.summary.monitoringCount, 1);
+  assert.equal(personalOverview.body.summary.compliance.some((item) => item.name === "Vệ sinh tay"), false);
   assert.equal((await request("/monitorings", nurseToken, {
     ...nursingObservation, area: "Sử dụng phòng hộ cá nhân", practiceResult: "Không VST", compliant: 0,
   })).status, 400);
@@ -202,6 +212,7 @@ test("simplified module persists notices, restricts responses and automatically 
   assert.equal((await request("/module/report-readiness?from=2024-13&to=2025-01", ksnk)).status, 400);
   await request("/reports", doctor, { month });
   assert.equal((await request("/reports", nurseToken, { month })).status, 201);
+  assert.equal((await request("/reports", doctor)).body.items.some((item) => item.employeeCode === nurse.employeeCode), false);
   assert.equal((await request("/reports", colleagueToken, { month })).status, 201);
   assert.equal((await request("/reports", genericToken, { month })).status, 201);
   const completeReadiness = await request(`/module/report-readiness?from=${month}&to=${month}`, ksnk);
@@ -222,6 +233,9 @@ test("simplified module persists notices, restricts responses and automatically 
   assert.equal((await request("/module/weekly-reports", nurseToken, {
     ...week, activities: "Thực hiện vệ sinh tay",
   })).status, 201);
+  assert.equal((await request(`/module/weekly-reports?from=${week.from}&to=${week.to}`, doctor)).body.items.length, 1);
+  assert.ok((await request(`/module/overview?from=${month}-01&to=${vietnamDate()}`, ksnk)).body.notices
+    .some((notice) => notice.text.includes(nurse.fullName) && notice.reportView === "weekly"));
   const partialWeekly = await request(`/module/weekly-reports?from=${week.from}&to=${week.to}`, ksnk);
   assert.equal(partialWeekly.body.readiness.doctors.submitted, 1);
   assert.equal(partialWeekly.body.readiness.members.submitted, 1);
@@ -344,7 +358,7 @@ test("simplified module persists notices, restricts responses and automatically 
   const departmentHeadAggregate = await request("/module/aggregate-report", departmentHeadToken, {
     from: `${month}-01`, to: vietnamDate(), group: "all", issueStatus: "all", types: ["monitorings"],
   });
-  assert.equal(departmentHeadAggregate.body.departmentCode, "A");
+  assert.equal(departmentHeadAggregate.status, 403);
   assert.equal((await request("/module/aggregate-report", departmentHeadToken, {
     from: `${month}-01`, to: vietnamDate(), group: "all", departmentCode: "B", issueStatus: "all",
     types: ["monitorings"],
@@ -360,8 +374,8 @@ test("simplified module persists notices, restricts responses and automatically 
   assert.equal(stored.monthlyReports.find((item) => item.employeeCode === nurse.employeeCode).memberType, "Điều dưỡng");
   assert.equal(stored.caseReports[0].employeeCode, member.employeeCode);
   assert.ok(stored.notifications.some((item) => item.recipient === admin.employeeCode && item.reportMonth === month));
-  assert.equal(stored.risks.find((item) => item.id === id).responses.length, 1);
-  assert.ok(stored.notifications.some((notice) => notice.recipient === member.employeeCode));
+  assert.equal((stored.risks.find((item) => item.id === id).responses || []).length, 0);
+  assert.ok(stored.notifications.some((notice) => notice.recipient === admin.employeeCode && notice.text.includes(member.fullName)));
 
   const quick = await request("/risks", doctor, { category: "Hand hygiene", severity: "Thấp", description: "  Short line\nMore detail" });
   assert.equal(quick.status, 201);
@@ -380,12 +394,14 @@ test("simplified module persists notices, restricts responses and automatically 
   assert.equal(handSummary.total, 2);
   assert.equal(handSummary.met, 1);
   assert.equal(handSummary.notPerformed, 1);
+  const counts = (await request(`/module/overview?${range}`, ksnk)).body.summary.departmentReportCounts;
+  assert.equal(counts.find((row) => row.type === "Nhiễm khuẩn bệnh viện" && row.departmentCode === "A").count, 1);
   const doctorWork = (await request(`/module/overview?${range}`, doctor)).body.work;
   const doctorNotices = (await request(`/module/overview?${range}`, doctor)).body.notices;
   assert.equal(doctorNotices.some((notice) => notice.id === "due-late-waiting"), false);
   assert.equal(doctorNotices.some((notice) => notice.id === "report-COLLEAGUE"), false);
   assert.equal(doctorWork.ownReportRequired, true);
-  assert.equal(doctorWork.overdue, 1, "issues waiting for KSNK confirmation are not overdue for the department");
+  assert.equal(doctorWork.overdue, 0, "issues belonging to others are not visible");
   assert.ok(doctorWork.reportMissing.some((person) => person.fullName === member.fullName));
   assert.equal((await request(`/module/overview?${range}`, ksnk)).body.work.ownReportRequired, false);
 

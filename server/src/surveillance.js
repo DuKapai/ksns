@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { readStore, updateStore, makeId } from "./store.js";
 import { validDate, validDateTime, validMonth } from "./validation.js";
-import { requireRecorder } from "./module.js";
+import { requireRecorder, ownsRecord, notifyManagers } from "./module.js";
 
 const BUNDLES = ["VAP", "CAUTI", "SSI", "CLABSI"];
 const CASE_TYPES = ["Nghi ngờ NKBV", "Bệnh truyền nhiễm cần đánh giá", "Nguy cơ lây truyền khác"];
@@ -48,7 +48,7 @@ function currentVietnamDateTime() {
 }
 
 function dailyStats(data, member, date) {
-  const entry = (data.dailySurveillance || []).find((item) =>
+  const entries = (data.dailySurveillance || []).filter((item) =>
     item.date === date && item.departmentCode === member.departmentCode);
   const departmentNurses = eligibleMembers(data).filter((item) =>
     item.memberType === "Điều dưỡng" && item.departmentCode === member.departmentCode);
@@ -62,7 +62,10 @@ function dailyStats(data, member, date) {
   const cases = (data.surveillanceCases || []).filter((item) =>
     item.date === date && item.departmentCode === member.departmentCode);
   const values = Object.fromEntries(BUNDLES.map((key) => {
-    const value = entry?.bundles?.[key] || { eligible: 0, compliant: 0 };
+    const value = entries.reduce((sum, entry) => ({
+      eligible: sum.eligible + (entry.bundles?.[key]?.eligible || 0),
+      compliant: sum.compliant + (entry.bundles?.[key]?.compliant || 0),
+    }), { eligible: 0, compliant: 0 });
     return [key, { eligible: value.eligible, compliant: value.compliant,
       rate: value.eligible > 0 ? Math.round((value.compliant / value.eligible) * 1000) / 10 : null }];
   }));
@@ -70,7 +73,7 @@ function dailyStats(data, member, date) {
     departmentCode: member.departmentCode, departmentName: member.departmentName,
     doctorNames: eligibleMembers(data).filter((item) => item.departmentCode === member.departmentCode && item.memberType === "Bác sĩ").map((item) => item.fullName),
     nurseNames: departmentNurses.map((item) => item.fullName),
-    doctorSubmitted: Boolean(entry), doctorEntry: entry || null,
+    doctorSubmitted: entries.length > 0, doctorEntry: entries[0] || null,
     nurseHandHygieneSubmitted: handHygiene.length > 0, handHygieneCount: handHygiene.length,
     handHygieneOpportunities: opportunities, handHygieneCompliant: actions,
     handHygieneRate: opportunities > 0 ? Math.round((actions / opportunities) * 1000) / 10 : null,
@@ -82,15 +85,15 @@ function dailyStats(data, member, date) {
 
 function monthlyStats(data, user, month) {
   const monthEntries = (data.dailySurveillance || []).filter((item) =>
-    item.date?.startsWith(month) && departmentVisible(user, item.departmentCode));
+    item.date?.startsWith(month) && (canViewAll(user) || ownsRecord(user, item)));
   const monitorings = (data.monitorings || []).filter((item) =>
     item.date?.startsWith(month) && item.area === "Vệ sinh tay" &&
-    departmentVisible(user, item.departmentCode) &&
+    (canViewAll(user) || ownsRecord(user, item, "observerEmployeeCode")) &&
     (item.observerRole === "MEMBER_NURSE" ||
       (!item.observerRole && eligibleMembers(data).some((nurse) =>
         nurse.memberType === "Điều dưỡng" && nurse.departmentCode === item.departmentCode && nurse.fullName === item.observer))));
   const cases = (data.surveillanceCases || []).filter((item) =>
-    item.date?.startsWith(month) && departmentVisible(user, item.departmentCode));
+    item.date?.startsWith(month) && (canViewAll(user) || ownsRecord(user, item)));
   const opportunities = monitorings.reduce((sum, item) => sum + (Number.isSafeInteger(item.sampleSize) ? item.sampleSize : 0), 0);
   const compliant = monitorings.reduce((sum, item) => sum + (Number.isSafeInteger(item.compliant) ? item.compliant : 0), 0);
   return {
@@ -123,7 +126,7 @@ export function surveillanceRouter({ currentUser, hasRole, audit }) {
 
   router.use(currentUser);
 
-  router.get("/daily", dateQuery, asyncRoute(async (req, res) => {
+  router.get("/daily", ksnkReaders, dateQuery, asyncRoute(async (req, res) => {
     const data = await readStore();
     const memberships = eligibleMembers(data).filter((member) => departmentVisible(req.user, member.departmentCode));
     const departments = [...new Map(memberships.map((member) => [member.departmentCode, member])).values()]
@@ -154,12 +157,12 @@ export function surveillanceRouter({ currentUser, hasRole, audit }) {
     }
     const saved = await updateStore((data) => {
       const matchingCases = (data.surveillanceCases || []).some((item) =>
-        item.date === body.date && item.departmentCode === req.user.departmentCode);
+        item.date === body.date && ownsRecord(req.user, item));
       if (body.caseDeclaration !== undefined &&
           (body.caseDeclaration === "reported") !== matchingCases) return null;
       data.dailySurveillance ||= [];
       const existing = data.dailySurveillance.find((item) =>
-        item.date === body.date && item.departmentCode === req.user.departmentCode);
+        item.date === body.date && ownsRecord(req.user, item));
       const record = {
         id: existing?.id || makeId("dailySurveillance"),
         date: body.date, departmentCode: req.user.departmentCode, departmentName: req.user.departmentName,
@@ -176,6 +179,7 @@ export function surveillanceRouter({ currentUser, hasRole, audit }) {
         if (body.caseDeclaration === undefined) delete existing.caseDeclaration;
       }
       else data.dailySurveillance.unshift(record);
+      notifyManagers(data, req.user, "đã gửi báo cáo hằng ngày", "reports");
       audit(data, req.user, "Gửi/cập nhật báo cáo KSNK hằng ngày", "dailySurveillance", record.id);
       return record;
     });
@@ -192,7 +196,7 @@ export function surveillanceRouter({ currentUser, hasRole, audit }) {
     const data = await readStore();
     const items = (data.surveillanceCases || []).filter((item) =>
       item.date >= req.query.from && item.date <= req.query.to &&
-      departmentVisible(req.user, item.departmentCode))
+      (canViewAll(req.user) || ownsRecord(req.user, item)))
       .sort((a, b) => b.detectedAt.localeCompare(a.detectedAt));
     res.json({ items });
   }));
@@ -225,6 +229,7 @@ export function surveillanceRouter({ currentUser, hasRole, audit }) {
         timeline: [{ at: new Date().toISOString(), by: req.user.fullName, action: "Ghi nhận ca nghi ngờ; cần báo trực tiếp theo quy trình" }],
       };
       data.surveillanceCases.unshift(record);
+      notifyManagers(data, req.user, "đã gửi phiếu ca nghi ngờ", "reports");
       audit(data, req.user, "Ghi nhận ca nghi ngờ/cách ly", "surveillanceCase", id);
       return record;
     });

@@ -99,7 +99,7 @@ test("doctor endpoints use isolated store, enforce permissions and snapshot cons
   assert.equal(created.status, 201);
   assert.equal(created.body.item.employeeCode, "D1");
   assert.equal((await post("/doctor/observations", other, { ...observation, location: "Khoa B" })).status, 201);
-  assert.equal((await get("/doctor/observations", nurse)).body.items.length, 1);
+  assert.equal((await get("/doctor/observations", nurse)).body.items.length, 0);
   assert.equal((await get("/doctor/observations", admin)).body.items.length, 2);
   assert.equal((await get("/doctor/summary?month=2025-13", doctor)).status, 400);
   assert.equal((await get(`/doctor/summary?month=${month}`, nurse)).status, 403);

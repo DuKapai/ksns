@@ -1,5 +1,5 @@
-<div class="app">
-  <div class="sticky-top">
+<div class="app" [class.login-view]="!user">
+  <div class="sticky-top" [attr.inert]="startupReady ? null : ''">
   <header class="top">
     <a routerLink="/app/dashboard" class="brand">
       <img src="assets/Logo.png" alt="" />
@@ -8,25 +8,38 @@
     @if (user) {
       <div class="top-right">
         <button type="button" class="bell" (click)="showNotices = !showNotices" [attr.aria-expanded]="showNotices">
-          Thông báo @if (notices.length) { <b>{{ notices.length }}</b> }
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-2 7-2 9h16c0-2-2-2-2-9M10 20h4" /></svg>
+          <span>Thông báo</span> @if (notices.length) { <b>{{ notices.length }}</b> }
         </button>
-        <div class="who"><strong>{{ user.fullName }}</strong><small>{{ user.position }} · {{ user.departmentName }}</small></div>
+        <div class="identity">
+          <span class="avatar" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5" /><path d="M5 20a7 7 0 0 1 14 0" /></svg></span>
+          <div class="who"><strong>{{ user.fullName }}</strong><small>{{ user.position }} · {{ user.departmentName }}</small></div>
+        </div>
+        <button type="button" class="bell" [disabled]="loading || saving" (click)="logout()">Đăng xuất</button>
       </div>
     }
   </header>
-
-  @if (context) {
+  </div>
+  @if (context && startupReady) {
     <nav class="tabs-main" aria-label="Chức năng chính">
-      <a routerLink="/app/dashboard" [class.on]="section === 'dashboard'" [attr.aria-current]="section === 'dashboard' ? 'page' : null">Trang chủ</a>
-      <a routerLink="/app/risks" [class.on]="section === 'risks' || section === 'monitorings'" [attr.aria-current]="section === 'risks' || section === 'monitorings' ? 'page' : null">Phiếu</a>
-      @if (isReader) { <a routerLink="/app/reports" [class.on]="section === 'reports'" [attr.aria-current]="section === 'reports' ? 'page' : null">Báo cáo</a> }
-      @if (context.seesAll) { <a routerLink="/app/manage" [class.on]="section === 'manage'" [attr.aria-current]="section === 'manage' ? 'page' : null">Quản lý</a> }
+      <span class="nav-caption">CHỨC NĂNG</span>
+      <a routerLink="/app/dashboard" [class.on]="section === 'dashboard'" [attr.aria-current]="section === 'dashboard' ? 'page' : null">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20H3zM9 20v-6h6v6" /></svg><span>Trang chủ</span>
+      </a>
+      <a routerLink="/app/risks" [class.on]="section === 'risks' || section === 'monitorings'" [attr.aria-current]="section === 'risks' || section === 'monitorings' ? 'page' : null">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4.5h6M9 10h6M9 14h6M9 18h4" /></svg><span>Phiếu</span>
+      </a>
+      @if (isReader) { <a routerLink="/app/reports" [class.on]="section === 'reports'" [attr.aria-current]="section === 'reports' ? 'page' : null">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 20h16M6 17v-5M12 17V5M18 17V9" /></svg><span>Báo cáo</span>
+      </a> }
+      @if (context.seesAll) { <a routerLink="/app/manage" [class.on]="section === 'manage'" [attr.aria-current]="section === 'manage' ? 'page' : null">
+        <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3" /><path d="M3 20v-1a6 6 0 0 1 12 0v1M16 5a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 5v1" /></svg><span>Quản lý</span>
+      </a> }
     </nav>
   }
-  </div>
 
   @if (showNotices) {
-    <div class="notice-panel">
+    <div class="notice-panel" animate.enter="motion-enter" animate.leave="motion-leave">
       @for (notice of notices; track notice.id) {
         <button type="button" [class.red]="notice.urgent" (click)="openNotice(notice)">{{ notice.text }}</button>
       } @empty { <p class="muted">Không có thông báo mới.</p> }
@@ -34,20 +47,26 @@
   }
 
   <main>
-    @if (success) { <p class="msg ok" role="status">{{ success }} <button type="button" (click)="success = ''" aria-label="Đóng">×</button></p> }
-    @if (error && !modal) { <div class="msg bad" role="alert">{{ error }} @if (context) { <button type="button" class="link" (click)="load()">Thử lại</button> }</div> }
-    @if (loading && !overview) { <p class="muted center">Đang tải…</p> }
+    @if (success) { <p class="msg ok" role="status" animate.enter="motion-enter" animate.leave="motion-leave">{{ success }} <button type="button" (click)="success = ''" aria-label="Đóng">×</button></p> }
+    @if (error && !modal) { <div class="msg bad" role="alert" animate.enter="motion-enter" animate.leave="motion-leave">{{ error }} @if (context) { <button type="button" class="link" (click)="load()">Thử lại</button> }</div> }
+    <div class="startup-loader" role="status" aria-live="polite"
+      [class.startup-loader--done]="startupReady && (!loading || !!overview)" [attr.aria-hidden]="startupReady && (!loading || !!overview) ? 'true' : null">
+      <div class="startup-mark"><img src="assets/Logo.png" alt="" /><span class="startup-spinner" aria-hidden="true"></span></div>
+      <strong>Mạng lưới Kiểm soát nhiễm khuẩn</strong><span class="startup-status">Đang tải…</span>
+    </div>
 
-    @if (context && overview) {
-      <h1>{{ title }}</h1>
+    @if (context && overview && startupReady) {
+      <div class="page-heading">
+        <div><span class="page-kicker">MẠNG LƯỚI KSNK</span><h1>{{ title }}</h1></div>
+      </div>
       <!-- TRANG CHỦ -->
       @if (section === 'dashboard') {
+        <div animate.enter="motion-enter">
         @if (canCreateCaseReport) {
           <section class="workflow-card doctor-workflow" aria-labelledby="doctor-workflow-title">
             <div class="workflow-intro">
               <span class="workflow-kicker">Nghiệp vụ bác sĩ</span>
               <h2 id="doctor-workflow-title">Ghi nhận và xử trí ca bệnh</h2>
-              <p>Lập phiếu ca bệnh, chọn phương án xử trí; bác sĩ và khoa được lấy tự động theo tài khoản đăng nhập.</p>
             </div>
             <div class="role-actions">
               <button type="button" class="role-action primary" (click)="openInfectionReport()">
@@ -66,7 +85,6 @@
             <div class="workflow-intro">
               <span class="workflow-kicker">Nghiệp vụ thành viên mạng lưới</span>
               <h2 id="member-workflow-title">Giám sát và ghi nhận tại khoa</h2>
-              <p>Điều dưỡng dùng bảng kiểm vệ sinh tay, phương tiện phòng hộ và phân loại chất thải; các chức danh khác ghi nhận công việc được giao.</p>
             </div>
             <div class="quick">
               <button type="button" (click)="openMonitoring()"><strong>Ghi phiếu giám sát</strong><small>Mở bảng kiểm theo nhiệm vụ của bạn</small></button>
@@ -80,7 +98,7 @@
           </div>
         }
 
-        @if (isReader) {
+        @if (canFollowReports) {
           <div class="cards">
             <button type="button" class="card" (click)="go('monitorings')">
               <small>Giám sát đến hạn</small><b>{{ overview.work.due || (overview.work.unscheduled ? '—' : 0) }}</b>
@@ -120,7 +138,7 @@
           @if (!isReader) { <p class="hint">Bạn được phản hồi phiếu liên quan đến mình đến hết tháng lập phiếu.</p> }
         </section>
 
-        @if (isReader) {
+        @if (canFollowReports) {
           <section class="box">
             <div class="box-head"><h2>Số liệu</h2><button type="button" class="link" (click)="exportReport()">Tải về</button></div>
             <ng-container *ngTemplateOutlet="periodPicker" />
@@ -149,6 +167,17 @@
                 </table>
               </div>
             } @else { <p class="muted">Chưa có số liệu trong khoảng này.</p> }
+            @if (overview.summary.departmentReportCounts.length) {
+              <h3>Số phiếu theo khoa/phòng và loại</h3>
+              <div class="scroll"><table>
+                <thead><tr><th>Khoa/phòng</th><th>Loại</th><th>Số phiếu</th></tr></thead>
+                <tbody>
+                  @for (item of overview.summary.departmentReportCounts; track item.departmentCode + item.type) {
+                    <tr><td>{{ item.departmentName }}</td><td>{{ item.type }}</td><td><b>{{ item.count }}</b></td></tr>
+                  }
+                </tbody>
+              </table></div>
+            }
             @if (overview.summary.departmentCompliance.length) {
               <h3>Kết quả theo khoa/phòng</h3>
               <div class="scroll"><table>
@@ -187,10 +216,12 @@
             } @empty { <p class="muted">Chưa có hoạt động.</p> }
           </section>
         }
+        </div>
       }
 
       <!-- PHIẾU -->
       @if (section === 'risks' || section === 'monitorings') {
+        <div animate.enter="motion-enter">
         @if (isReader) {
           <div class="seg">
             <a routerLink="/app/risks" [class.on]="section === 'risks'">Vấn đề</a>
@@ -199,6 +230,7 @@
         }
 
         @if (section === 'risks') {
+          <div animate.enter="motion-enter">
           @if (focusId) {
             <button type="button" class="link" (click)="go('risks')">← Tất cả phiếu</button>
           } @else {
@@ -250,9 +282,11 @@
               </details>
             </article>
           } @empty { <p class="muted center">Không có phiếu nào.</p> }
+          </div>
         }
 
         @if (section === 'monitorings') {
+          <div animate.enter="motion-enter">
           @if (canRecord) { <button type="button" class="btn add" (click)="openMonitoring()">＋ Ghi nhận giám sát</button> }
           @if (context.tasks.length) {
             <details class="box"><summary>Nội dung được giao</summary>
@@ -263,6 +297,7 @@
               }
             </details>
           }
+          <section class="box">
           <ng-container *ngTemplateOutlet="periodPicker" />
           @for (item of filteredMonitorings; track item.id) {
             <div class="row">
@@ -272,11 +307,15 @@
               <span class="badge">{{ item.sampleSize ? item.compliant + '/' + item.sampleSize + ' đúng' : 'Không có lượt quan sát' }}</span>
             </div>
           } @empty { <p class="muted center">Chưa có lượt giám sát trong khoảng này.</p> }
+          </section>
+          </div>
         }
+        </div>
       }
 
       <!-- BÁO CÁO -->
       @if (section === 'reports') {
+        <div animate.enter="motion-enter">
         <nav class="seg" aria-label="Loại báo cáo">
           <button type="button" [class.on]="reportView === 'weekly'" (click)="reportView = 'weekly'">Báo cáo tuần</button>
           <button type="button" [class.on]="reportView === 'monthly'" (click)="reportView = 'monthly'">Báo cáo tháng</button>
@@ -286,16 +325,15 @@
         </nav>
 
         @if (reportView === 'weekly') {
+          <div animate.enter="motion-enter">
           @if (canSubmitWeeklyReport) {
             <section class="box">
               <h2>Báo cáo tuần của tôi</h2>
               <p class="hint">{{ user?.fullName }} · {{ user?.position }} · {{ user?.departmentName }} (tự lấy theo tài khoản)</p>
-              @if (!canSubmitWeeklyReport) {
-                <div class="two">
-                  <label>Từ ngày <input type="date" [(ngModel)]="weekFrom" [max]="today" (change)="weeklyRangeChanged()" /></label>
-                  <label>Đến ngày <input type="date" [(ngModel)]="weekTo" [max]="today" (change)="weeklyRangeChanged()" /></label>
-                </div>
-              }
+              <div class="two">
+                <label>Từ ngày <input type="date" [(ngModel)]="weekFrom" [max]="today" (change)="weeklyRangeChanged()" /></label>
+                <label>Đến ngày <input type="date" [(ngModel)]="weekTo" [max]="today" (change)="weeklyRangeChanged()" /></label>
+              </div>
               @if (!weeklyRangeValid) { <p class="red-text">Chọn khoảng đúng 7 ngày, không vượt quá hôm nay.</p> }
               @if (myWeeklyReport) { <p class="ok-text">✓ Đã gửi báo cáo kỳ này ngày {{ date(myWeeklyReport.createdAt) }}. Có thể cập nhật trước khi tổng hợp.</p> }
               <form #weeklyFormElement="ngForm" (ngSubmit)="saveWeeklyReport()">
@@ -319,12 +357,13 @@
             </section>
           }
 
+          @if (canFollowReports) {
           <section class="box">
             <div class="box-head">
               <h2>Tổng hợp báo cáo tuần</h2>
               @if (canFollowReports) {
                 <button type="button" class="link" (click)="exportWeeklyReport()"
-                  [disabled]="!selectedWeeklySummary || (weeklyReportGroup === 'all' && (!weeklyReportReadiness || !weeklyReportReadiness.complete))">
+                  [disabled]="!selectedWeeklySummary">
                   Xuất báo cáo tuần Excel
                 </button>
               }
@@ -347,8 +386,7 @@
                   @if (weeklyReportReadiness.doctors.rate !== null) { ({{ weeklyReportReadiness.doctors.rate }}%) };
                   thành viên khác {{ weeklyReportReadiness.members.submitted }}/{{ weeklyReportReadiness.members.required }}
                   @if (weeklyReportReadiness.members.rate !== null) { ({{ weeklyReportReadiness.members.rate }}%) }.
-                  @if (!weeklyReportReadiness.complete) { Báo cáo toàn mạng lưới chỉ xuất khi đủ cả hai nhóm. }
-                  @else { Đã đủ mẫu để xuất báo cáo toàn mạng lưới. }
+                  @if (!weeklyReportReadiness.complete) { Chưa đủ báo cáo; số liệu là tạm thời. }
                 </p>
                 @if (!weeklyReportReadiness.complete && weeklyReportReadiness.missing.length) {
                   <small class="red-text">Chưa gửi:
@@ -403,7 +441,6 @@
                 </table></div>
               }
             }
-            @if (weeklyReportGroup !== 'all' || !canFollowReports || weeklyReportReadiness?.complete) {
               @if (filteredWeeklyReports.length) {
                 <h3>Báo cáo công việc của thành viên</h3>
                 @for (item of filteredWeeklyReports; track item.id) {
@@ -416,11 +453,9 @@
                   </details>
                 }
               } @else { <p class="muted">Chưa có báo cáo tuần trong kỳ này.</p> }
-            } @else { <p class="hint">Báo cáo 3 · Toàn mạng lưới chưa được tổng hợp. Chờ đủ mẫu của bác sĩ và các thành viên khác.</p> }
           </section>
 
-          @if (weeklyReportGroup !== 'members' && weeklyCaseReportSummary &&
-            (weeklyReportGroup !== 'all' || !canFollowReports || weeklyReportReadiness?.complete)) {
+          @if (weeklyReportGroup !== 'members' && weeklyCaseReportSummary) {
             <section class="box">
               <div class="box-head"><h2>Ca bệnh trong tuần</h2>
                 @if (canFollowReports) { <button type="button" class="link" (click)="exportWeeklyReport()">Xuất cùng báo cáo tuần</button> }
@@ -485,9 +520,12 @@
               }
             </section>
           }
+          }
+          </div>
         }
 
         @if (reportView === 'monthly') {
+        <div animate.enter="motion-enter">
         @if (canRecord && overview.work.ownReportRequired) {
           <section class="box">
             <h2>Báo cáo tháng của tôi</h2>
@@ -523,8 +561,7 @@
 
         <section class="box">
           <div class="box-head"><h2>{{ canFollowReports ? 'Báo cáo đã xác nhận' : 'Báo cáo tôi đã xác nhận' }}</h2>
-            <button type="button" class="link" (click)="exportReport()"
-              [disabled]="canFollowReports && reportGroup === 'all' && (!reportReadiness || !reportReadiness.complete)">Tải Excel</button></div>
+            @if (canFollowReports) { <button type="button" class="link" (click)="exportReport()">Tải Excel</button> }</div>
           <ng-container *ngTemplateOutlet="periodPicker" />
           @if (canFollowReports) {
             <label class="inline">Nhóm báo cáo
@@ -540,8 +577,7 @@
                 @if (reportReadiness.doctors.rate !== null) { ({{ reportReadiness.doctors.rate }}%) };
                 thành viên mạng lưới khác {{ reportReadiness.members.submitted }}/{{ reportReadiness.members.required }}
                 @if (reportReadiness.members.rate !== null) { ({{ reportReadiness.members.rate }}%) }.
-                @if (!reportReadiness.complete) { Báo cáo tổng hợp toàn mạng lưới chỉ xuất được khi cả hai nhóm đã đủ mẫu. }
-                @else { Đã đủ mẫu để xuất báo cáo tổng hợp. }
+                @if (!reportReadiness.complete) { Chưa đủ báo cáo; số liệu là tạm thời. }
               </p>
               @if (!reportReadiness.complete && reportReadiness.missing.length) {
                 <small class="red-text">Chưa nộp:
@@ -612,7 +648,7 @@
           }
         </section>
 
-        @if (reportGroup !== 'members' && canReadCaseReports) { <section class="box">
+        @if (canFollowReports && reportGroup !== 'members' && canReadCaseReports) { <section class="box">
           <div class="box-head">
             <h2>Tổng hợp phiếu ca bệnh</h2>
             <button type="button" class="link" (click)="exportCaseReports()" [disabled]="!caseReportSummary">Tải Excel ca bệnh</button>
@@ -678,9 +714,11 @@
             } @else { <p class="muted">Chưa có phiếu ca bệnh trong khoảng này.</p> }
           }
         </section> }
+        </div>
         }
 
         @if (reportView === 'custom' && canFollowReports) {
+          <div animate.enter="motion-enter">
           <section class="box">
             <h2>Xuất báo cáo theo điều kiện</h2>
             <p class="hint">Mỗi loại phiếu có bảng tổng hợp và mẫu số riêng để tính tỷ lệ. Tệp chi tiết ca bệnh không chứa tên hoặc địa chỉ người bệnh.</p>
@@ -771,17 +809,20 @@
               }
             </section>
           }
+          </div>
         }
+        </div>
       }
 
       <!-- QUẢN LÝ -->
       @if (section === 'manage') {
+        <div animate.enter="motion-enter">
         <nav class="seg" aria-label="Quản lý">
           <a routerLink="/app/manage" [queryParams]="{panel:'members'}" [class.on]="manageView === 'members'">Thành viên</a>
           <a routerLink="/app/manage" [queryParams]="{panel:'settings'}" [class.on]="manageView === 'settings'">Hạn báo cáo</a>
           @if (canReadLog) { <a routerLink="/app/manage" [queryParams]="{panel:'history'}" [class.on]="manageView === 'history'">Lịch sử</a> }
         </nav>
-        @if (manageView === 'members') { <section class="box">
+        @if (manageView === 'members') { <section class="box" animate.enter="motion-enter">
           <div class="box-head">
             <h2>Thành viên mạng lưới <small>{{ activeMembers }} đang tham gia</small></h2>
             @if (canManage) { <button type="button" class="btn small" (click)="openMember()">＋ Thêm</button> }
@@ -798,7 +839,7 @@
           } @empty { <p class="muted">Không tìm thấy thành viên.</p> }
         </section> }
 
-        @if (manageView === 'settings') { <section class="box">
+        @if (manageView === 'settings') { <section class="box" animate.enter="motion-enter">
           <h2>Hạn báo cáo tháng</h2>
           @if (canManage) {
             <div class="inline">Ngày <input type="number" min="1" max="28" [(ngModel)]="reportDay" class="day" aria-label="Ngày hạn báo cáo hằng tháng" /> của tháng sau
@@ -808,33 +849,70 @@
         </section> }
 
         @if (manageView === 'history' && canReadLog) {
-          <section class="box">
+          <section class="box" animate.enter="motion-enter">
             <h2>Lịch sử thao tác</h2>
             @for (log of logs; track log.id) {
               <div class="row"><div><strong>{{ log.action }}</strong><small>{{ log.user }} · {{ dateTime(log.at) }}</small></div></div>
             } @empty { <p class="muted">Chưa có thao tác.</p> }
           </section>
         }
+        </div>
       }
     }
 
-    @if (!context && !loading && error) {
-      <p class="center"><button type="button" class="btn" (click)="enterDemo(persona)">Thử lại</button></p>
+    @if (!user && !loading && startupReady) {
+      <section class="login-box" animate.enter="login-enter">
+        <div class="login-form-panel">
+        <div class="login-brand">
+          <img src="assets/Logo.png" alt="" />
+          <div><strong>Bệnh viện Đa khoa Hùng Vương</strong><span>Mạng lưới Kiểm soát nhiễm khuẩn</span></div>
+        </div>
+        <div class="login-heading">
+          <span class="login-eyebrow">MẠNG LƯỚI KSNK</span>
+          <h1>Đăng nhập</h1>
+          <p>Chào mừng bạn trở lại.</p>
+        </div>
+        <form #loginForm="ngForm" (ngSubmit)="login()">
+          <label>Tài khoản <input name="username" [(ngModel)]="loginUsername" autocomplete="username" required /></label>
+          <label for="login-password">Mật khẩu</label>
+          <div class="password-field">
+            <input id="login-password" name="password" [type]="showLoginPassword ? 'text' : 'password'" [(ngModel)]="loginPassword" autocomplete="current-password" required />
+            <button type="button" (click)="showLoginPassword = !showLoginPassword"
+              [attr.aria-label]="showLoginPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'">{{ showLoginPassword ? 'Ẩn' : 'Hiện' }}</button>
+          </div>
+          <button type="submit" class="btn" [disabled]="!loginForm.valid || loginConnectionError">Đăng nhập</button>
+        </form>
+        @if (loginConnectionError) {
+          <div class="demo-accounts" role="alert">
+            @if (demoLoginUrl) {
+              Trang này chưa kết nối máy chủ. <a [href]="demoLoginUrl">Mở trang demo để đăng nhập</a>.
+            } @else {
+              Không kết nối được máy chủ. Hãy chạy lại run-demo.bat rồi mở địa chỉ được hiển thị.
+            }
+          </div>
+        }
+        @if (demoAccounts.length) {
+          <div class="demo-accounts">
+            <h2>Tài khoản demo</h2>
+            @for (account of demoAccounts; track account.username) {
+              <p><strong>{{ account.label }}:</strong>
+                <a [href]="demoAccountLink(account)" (click)="selectDemoAccount($event, account)">{{ account.username }}</a>
+              </p>
+            }
+            <p>Mật khẩu: <strong>{{ demoAccounts[0].password }}</strong></p>
+            <small>Bấm tài khoản để tự điền. Chỉ dùng dữ liệu demo.</small>
+          </div>
+        }
+        </div>
+        <div class="login-photo">
+          <img src="assets/ksnk.jpg" alt="Nhân viên kiểm soát nhiễm khuẩn đang xử lý dụng cụ" />
+        </div>
+      </section>
+    } @else if (user && !context && !loading && error) {
+      <p class="center"><button type="button" class="btn" (click)="logout()">Đăng nhập lại</button></p>
     }
   </main>
 
-  @if (isDemo && context) {
-    <footer>
-      <div class="persona" role="group" aria-label="Xem với vai trò">
-        <span class="persona-label">Xem với vai trò</span>
-        @for (option of personas; track option.value) {
-          <button type="button" [class.on]="persona === option.value" [disabled]="loading || saving"
-            [attr.aria-pressed]="persona === option.value" (click)="persona !== option.value && switchPersona(option.value)">{{ option.label }}</button>
-        }
-      </div>
-      <span class="demo-note">Tài khoản: {{ demoRoleLabel }} · Demo chỉ dùng dữ liệu giả</span>
-    </footer>
-  }
 </div>
 
 <ng-template #periodPicker>

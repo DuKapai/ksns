@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { readStore, updateStore, makeId } from "./store.js";
 import { validDate, validDateTime, validMonth } from "./validation.js";
-import { requireRecorder } from "./module.js";
+import { requireRecorder, ownsRecord, seesAll, notifyManagers } from "./module.js";
 
 const defaults = { dailyMinutes: 15, weeklyMinutes: 30, monthlyWeeklyTarget: 4, reportDay: 5 };
 const periods = ["Hằng ngày", "Hằng tuần", "Đột xuất"];
@@ -70,7 +70,7 @@ export function doctorRouter({ currentUser, hasRole, sameDepartmentOrAdmin, audi
     if (!validMonth(req.query.month)) return res.status(400).json({ message: "Tháng phải có dạng YYYY-MM hợp lệ." });
     next();
   };
-  const visible = (req, item) => filled(item.departmentCode) && sameDepartmentOrAdmin(req, item.departmentCode);
+  const visible = (req, item) => seesAll(req.user) || ownsRecord(req.user, item);
 
   router.use(currentUser);
 
@@ -125,6 +125,7 @@ export function doctorRouter({ currentUser, hasRole, sameDepartmentOrAdmin, audi
         departmentCode: req.user.departmentCode, departmentName: req.user.departmentName, createdAt: new Date().toISOString(),
       };
       data.doctorObservations.unshift(record);
+      notifyManagers(data, req.user, "đã gửi phiếu giám sát bác sĩ", "monitorings");
       audit(data, req.user, "Tạo phiếu giám sát bác sĩ", "doctorObservation", id);
       return record;
     });
@@ -154,6 +155,7 @@ export function doctorRouter({ currentUser, hasRole, sameDepartmentOrAdmin, audi
         summary: summaryFor(data, req.user, b.month), createdAt: new Date().toISOString(), status: "Đã gửi",
       };
       data.doctorReports.unshift(record);
+      notifyManagers(data, req.user, "đã gửi báo cáo tháng", "reports", { reportMonth: record.month });
       audit(data, req.user, "Gửi báo cáo tháng bác sĩ", "doctorReport", record.id);
       return record;
     });
