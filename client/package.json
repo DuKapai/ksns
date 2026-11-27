@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "start": "ng serve --host 127.0.0.1",
-    "build": "ng build"
+    "build": "ng build",
+    "build:pages": "node pages-demo/build.mjs && ng build --configuration production,pages --base-href=/ksns/",
+    "test:pages": "node pages-demo/build.mjs && node --test pages-demo/browser-api.test.mjs"
   },
   "dependencies": {
     "@angular/common": "^20.3.0",
@@ -21,6 +23,7 @@
     "@angular/build": "^20.3.0",
     "@angular/cli": "^20.3.0",
     "@angular/compiler-cli": "^20.3.0",
+    "esbuild": "0.28.1",
     "typescript": "~5.9.2"
   }
 }

@@ -113,6 +113,7 @@ h2 small { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 
 .demo-accounts p { margin: 5px 0; }
 .demo-accounts a { margin-left: 4px; color: var(--green-text); text-decoration: underline; }
 .demo-accounts small { color: var(--muted); }
+.browser-demo-notice { margin: 0 0 16px; padding: 10px 14px; border-radius: 8px; background: #e9f8f8; color: #075b5d; font-size: 14px; }
 .box-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 
 .todo, .row { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-top: 1px solid var(--line); }

@@ -1,10 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, isDevMode, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, ElementRef, inject, isDevMode, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Subscription, forkJoin, of } from 'rxjs';
-import { ApiService, User } from '../core/api.service';
+import { ApiService, BROWSER_DEMO, User } from '../core/api.service';
 
 interface Task { id: string; title: string; area: string; dueDate?: string; }
 interface DemoAccount { username: string; label: string; password: string; }
@@ -144,6 +144,7 @@ const FILTERS: Record<string, (issue: Issue) => boolean> = {
   styleUrl: './module.component.css',
 })
 export class ModuleComponent implements OnInit, OnDestroy {
+  readonly browserDemo = inject(BROWSER_DEMO);
   user: User | null = null;
   context: Context | null = null;
   overview: Overview | null = null;

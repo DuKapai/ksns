@@ -8,6 +8,7 @@ export interface User {
 }
 
 export const API_BASE = new InjectionToken<string>('API_BASE', { providedIn: 'root', factory: () => '/api' });
+export const BROWSER_DEMO = new InjectionToken<boolean>('BROWSER_DEMO', { providedIn: 'root', factory: () => false });
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {

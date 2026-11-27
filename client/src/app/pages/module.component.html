@@ -47,6 +47,9 @@
   }
 
   <main>
+    @if (browserDemo && user) {
+      <p class="browser-demo-notice">Bản demo: dữ liệu giả chỉ lưu trong trình duyệt này, không chia sẻ giữa các máy. Không nhập dữ liệu thật.</p>
+    }
     @if (success) { <p class="msg ok" role="status" animate.enter="motion-enter" animate.leave="motion-leave">{{ success }} <button type="button" (click)="success = ''" aria-label="Đóng">×</button></p> }
     @if (error && !modal) { <div class="msg bad" role="alert" animate.enter="motion-enter" animate.leave="motion-leave">{{ error }} @if (context) { <button type="button" class="link" (click)="load()">Thử lại</button> }</div> }
     <div class="startup-loader" role="status" aria-live="polite"
@@ -900,7 +903,10 @@
               </p>
             }
             <p>Mật khẩu: <strong>{{ demoAccounts[0].password }}</strong></p>
-            <small>Bấm tài khoản để tự điền. Chỉ dùng dữ liệu demo.</small>
+            <small>Bấm tài khoản để tự điền.
+              @if (browserDemo) { Dữ liệu giả chỉ lưu trong trình duyệt này, không chia sẻ giữa các máy. Không nhập dữ liệu thật. }
+              @else { Chỉ dùng dữ liệu demo. }
+            </small>
           </div>
         }
         </div>

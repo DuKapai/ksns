@@ -22,7 +22,8 @@
           },
           "configurations": {
             "production": {"budgets":[{"type":"initial","maximumWarning":"1.5MB","maximumError":"3MB"}],"outputHashing":"all","optimization":{"scripts":true,"styles":{"minify":true,"inlineCritical":false},"fonts":true}},
-            "development": {"optimization":false,"extractLicenses":false,"sourceMap":true}
+            "development": {"optimization":false,"extractLicenses":false,"sourceMap":true},
+            "pages": {"browser":"src/main-pages.ts","tsConfig":"tsconfig.pages.json","outputPath":"dist/ksnk-pages"}
           },
           "defaultConfiguration": "production"
         },
