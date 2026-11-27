@@ -1,10 +1,12 @@
 import { bootstrapApplication } from '@angular/platform-browser';
-import { provideRouter } from '@angular/router';
+import { provideRouter, withHashLocation } from '@angular/router';
 import { provideHttpClient } from '@angular/common/http';
 import { AppComponent } from './app/app.component';
 import { routes } from './app/app.routes';
 
-bootstrapApplication(AppComponent, { providers: [provideRouter(routes), provideHttpClient()] })
+const routerFeatures = window.location.hostname.endsWith('.github.io') ? [withHashLocation()] : [];
+
+bootstrapApplication(AppComponent, { providers: [provideRouter(routes, ...routerFeatures), provideHttpClient()] })
   .catch(error => {
     console.error(error);
     const loader = document.querySelector('.startup-loader');
