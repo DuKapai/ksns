@@ -334,8 +334,8 @@
               <h2>Báo cáo tuần của tôi</h2>
               <p class="hint">{{ user?.fullName }} · {{ user?.position }} · {{ user?.departmentName }} (tự lấy theo tài khoản)</p>
               <div class="two">
-                <label>Từ ngày <input type="date" [(ngModel)]="weekFrom" [max]="today" (change)="weeklyRangeChanged()" /></label>
-                <label>Đến ngày <input type="date" [(ngModel)]="weekTo" [max]="today" (change)="weeklyRangeChanged()" /></label>
+                <label>Từ ngày <app-date-picker label="Từ ngày" [(ngModel)]="weekFrom" [max]="today" (ngModelChange)="weeklyRangeChanged()" /></label>
+                <label>Đến ngày <app-date-picker label="Đến ngày" [(ngModel)]="weekTo" [max]="today" (ngModelChange)="weeklyRangeChanged()" /></label>
               </div>
               @if (!weeklyRangeValid) { <p class="red-text">Chọn khoảng đúng 7 ngày, không vượt quá hôm nay.</p> }
               @if (myWeeklyReport) { <p class="ok-text">✓ Đã gửi báo cáo kỳ này ngày {{ date(myWeeklyReport.createdAt) }}. Có thể cập nhật trước khi tổng hợp.</p> }
@@ -372,8 +372,8 @@
               }
             </div>
             <div class="two">
-              <label>Từ ngày <input type="date" [(ngModel)]="weekFrom" [max]="today" (change)="weeklyRangeChanged()" /></label>
-              <label>Đến ngày <input type="date" [(ngModel)]="weekTo" [max]="today" (change)="weeklyRangeChanged()" /></label>
+              <label>Từ ngày <app-date-picker label="Từ ngày" [(ngModel)]="weekFrom" [max]="today" (ngModelChange)="weeklyRangeChanged()" /></label>
+              <label>Đến ngày <app-date-picker label="Đến ngày" [(ngModel)]="weekTo" [max]="today" (ngModelChange)="weeklyRangeChanged()" /></label>
             </div>
             @if (canFollowReports) {
               <label class="inline">Loại báo cáo
@@ -757,8 +757,8 @@
             <h2>Xuất báo cáo theo điều kiện</h2>
             <p class="hint">Mỗi loại phiếu có bảng tổng hợp và mẫu số riêng để tính tỷ lệ. Tệp chi tiết ca bệnh không chứa tên hoặc địa chỉ người bệnh.</p>
             <div class="two">
-              <label>Từ ngày <input type="date" [(ngModel)]="customFrom" [max]="today" /></label>
-              <label>Đến ngày <input type="date" [(ngModel)]="customTo" [max]="today" /></label>
+              <label>Từ ngày <app-date-picker label="Từ ngày" [(ngModel)]="customFrom" [max]="today" /></label>
+              <label>Đến ngày <app-date-picker label="Đến ngày" [(ngModel)]="customTo" [max]="today" /></label>
             </div>
             <label>Phạm vi khoa/phòng
               <select [(ngModel)]="customDepartmentCode">
@@ -960,7 +960,7 @@
   </div>
   @if (period === 'custom') {
     <div class="inline">
-      <input type="date" [(ngModel)]="from" aria-label="Từ ngày" /> – <input type="date" [(ngModel)]="to" aria-label="Đến ngày" />
+      <app-date-picker label="Từ ngày" [(ngModel)]="from" /> – <app-date-picker label="Đến ngày" [(ngModel)]="to" />
       <button type="button" class="btn small" (click)="applyRange()">Xem</button>
     </div>
   }
@@ -1031,7 +1031,7 @@
             <label>Điểm chưa đạt/cần cải thiện <textarea name="findings" rows="2" maxlength="4000" [(ngModel)]="monitoringForm.findings" required
               placeholder="Mô tả ngắn gọn điều chưa đúng"></textarea></label>
           }
-          <label>Ngày <input name="date" type="date" [max]="today" [(ngModel)]="monitoringForm.date" required /></label>
+          <label>Ngày <app-date-picker name="date" label="Ngày" [max]="today" [(ngModel)]="monitoringForm.date" required /></label>
           <ng-container *ngTemplateOutlet="actions; context: { valid: f.valid, label: 'Lưu giám sát' }" />
         </form>
       }
@@ -1068,7 +1068,7 @@
           }
           <details><summary>Thêm chi tiết (không bắt buộc)</summary>
             <label>Đã xử lý ngay <input name="immediate" [(ngModel)]="issueForm.immediateAction" maxlength="1000" /></label>
-            <label>Hạn khắc phục <input name="due" type="date" [min]="today" [(ngModel)]="issueForm.dueDate" /></label>
+            <label>Hạn khắc phục <app-date-picker name="due" label="Hạn khắc phục" [min]="today" [(ngModel)]="issueForm.dueDate" /></label>
           </details>
           <ng-container *ngTemplateOutlet="actions; context: { valid: f.valid, label: 'Gửi phiếu' }" />
         </form>
@@ -1133,7 +1133,7 @@
         <form #f="ngForm" (ngSubmit)="f.valid && saveInfectionReport()">
           <p class="hint">Người lập: {{ user?.fullName }} · {{ user?.position }} · {{ user?.departmentName }} (tự điền theo tài khoản)</p>
           <div class="two">
-            <label>Ngày phát hiện <input name="date" type="date" [max]="today" [(ngModel)]="infectionForm.date" required /></label>
+            <label>Ngày phát hiện <app-date-picker name="date" label="Ngày phát hiện" [max]="today" [(ngModel)]="infectionForm.date" required /></label>
             <label>Loại nhiễm khuẩn
               <select name="infectionType" [(ngModel)]="infectionForm.infectionType" required>
                 <option value="">-- Chọn --</option>
@@ -1160,8 +1160,8 @@
           <label>Mã chẩn đoán <input name="diagCode" [(ngModel)]="infectionForm.diagnosisCode" maxlength="40" /></label>
           <label>Chẩn đoán <input name="diag" [(ngModel)]="infectionForm.diagnosisName" maxlength="200" required /></label>
           <div class="two">
-            <label>Ngày phát bệnh <input name="onsetDate" type="date" [max]="infectionForm.date" [(ngModel)]="infectionForm.onsetDate" /></label>
-            <label>Ngày nhập viện <input name="admissionDate" type="date" [max]="today" [(ngModel)]="infectionForm.admissionDate" /></label>
+            <label>Ngày phát bệnh <app-date-picker name="onsetDate" label="Ngày phát bệnh" [max]="infectionForm.date" [(ngModel)]="infectionForm.onsetDate" /></label>
+            <label>Ngày nhập viện <app-date-picker name="admissionDate" label="Ngày nhập viện" [max]="today" [(ngModel)]="infectionForm.admissionDate" /></label>
           </div>
           <fieldset><legend>Phương án xử trí ca bệnh</legend>
             <div class="choices">
@@ -1196,7 +1196,7 @@
           <p class="hint">Người lập: {{ user?.fullName }} · {{ user?.position }} · {{ user?.departmentName }} (tự điền theo tài khoản)</p>
           <p class="hint">Biểu mẫu demo: chỉ nhập dữ liệu giả, không nhập thông tin người bệnh thật.</p>
           <div class="two">
-            <label>Ngày phát hiện <input name="date" type="date" [max]="today" [(ngModel)]="transmissionForm.date" required /></label>
+            <label>Ngày phát hiện <app-date-picker name="date" label="Ngày phát hiện" [max]="today" [(ngModel)]="transmissionForm.date" required /></label>
           </div>
           <label>Mã ca/tên <input name="patient" [(ngModel)]="transmissionForm.patientName" maxlength="120" /></label>
           <div class="two">
@@ -1231,12 +1231,12 @@
             </label>
           </div>
           <div class="two">
-            <label>Ngày khởi phát <input name="onsetDate" type="date" [max]="transmissionForm.date" [(ngModel)]="transmissionForm.onsetDate" /></label>
-            <label>Ngày nhập viện <input name="admissionDate" type="date" [max]="today" [(ngModel)]="transmissionForm.admissionDate" /></label>
+            <label>Ngày khởi phát <app-date-picker name="onsetDate" label="Ngày khởi phát" [max]="transmissionForm.date" [(ngModel)]="transmissionForm.onsetDate" /></label>
+            <label>Ngày nhập viện <app-date-picker name="admissionDate" label="Ngày nhập viện" [max]="today" [(ngModel)]="transmissionForm.admissionDate" /></label>
           </div>
           <div class="two">
-            <label>Ngày bắt đầu cách ly <input name="isolationStart" type="date" [max]="today" [(ngModel)]="transmissionForm.isolationStartDate" /></label>
-            <label>Ngày kết thúc cách ly <input name="isolationEnd" type="date" [min]="transmissionForm.isolationStartDate || undefined" [(ngModel)]="transmissionForm.isolationEndDate" /></label>
+            <label>Ngày bắt đầu cách ly <app-date-picker name="isolationStart" label="Ngày bắt đầu cách ly" [max]="today" [(ngModel)]="transmissionForm.isolationStartDate" /></label>
+            <label>Ngày kết thúc cách ly <app-date-picker name="isolationEnd" label="Ngày kết thúc cách ly" [min]="transmissionForm.isolationStartDate || undefined" [(ngModel)]="transmissionForm.isolationEndDate" /></label>
           </div>
           <label>Các biện pháp phòng ngừa <textarea name="measures" rows="2" [(ngModel)]="transmissionForm.preventiveMeasures"
             placeholder="Các biện pháp phòng ngừa đã áp dụng"></textarea></label>

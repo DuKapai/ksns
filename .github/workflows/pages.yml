@@ -26,6 +26,7 @@ jobs:
           cache-dependency-path: client/package-lock.json
       - run: npm ci --prefix client
       - run: npm run test:pages --prefix client
+      - run: npm run test:calendar --prefix client
       - run: npm run build:pages --prefix client
       - uses: actions/upload-pages-artifact@v3
         with:

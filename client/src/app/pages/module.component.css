@@ -198,6 +198,7 @@ summary { cursor: pointer; color: var(--green-text); font-weight: 600; font-size
 form label { display: block; font-weight: 600; font-size: 14px; margin: 12px 0 0; }
 form label small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; margin-top: 4px; }
 form input:not([type=radio]), form select, form textarea, .box textarea { display: block; width: 100%; margin-top: 4px; padding: 9px 10px; border: 1px solid #cfdbd7; border-radius: 8px; background: #fff; font-weight: 400; }
+form app-date-picker, .two app-date-picker { display: block; width: 100%; margin-top: 4px; }
 form .ng-touched.ng-invalid { border-color: var(--red); }
 .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 .rate { margin: 8px 0 0; font-weight: 600; color: var(--green-text); }
@@ -236,12 +237,6 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px soli
 .app:not(.login-view) form .ng-touched.ng-invalid { border-color: var(--red); }
 .app:not(.login-view) :is(input[type="checkbox"], input[type="radio"]) { accent-color: var(--green-text); }
 .app:not(.login-view) .two :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { width: 100%; }
-.app:not(.login-view) input[type="date"]::-webkit-calendar-picker-indicator,
-.app:not(.login-view) input[type="month"]::-webkit-calendar-picker-indicator {
-  cursor: pointer; border-radius: 6px; padding: 4px; transition: background-color .2s ease;
-}
-.app:not(.login-view) input[type="date"]::-webkit-calendar-picker-indicator:hover,
-.app:not(.login-view) input[type="month"]::-webkit-calendar-picker-indicator:hover { background: var(--green-soft); }
 .app:not(.login-view) details[open] > :not(summary) { animation: motion-enter .25s ease both; }
 @media (hover: hover) {
   .app:not(.login-view) :is(.tabs-main a, .seg a, .seg button, .chips button, .bell, .btn.ghost, summary):hover { background-color: var(--green-soft); color: var(--green-text); }
@@ -255,9 +250,7 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px soli
 .app:not(.login-view) :is(.btn:not(.ghost):not(:disabled), .quick button:not(:disabled), .role-action:not(:disabled), .card:not(:disabled), .notice-panel button:not(:disabled)):active { transform: scale(.98); box-shadow: 0 2px 6px rgba(0, 104, 108, .12); }
 @media (prefers-reduced-motion: reduce) {
   .dialog[open] { animation: none; }
-  .app:not(.login-view) :is(button, a, .choice, input, select, textarea, summary),
-  .app:not(.login-view) input[type="date"]::-webkit-calendar-picker-indicator,
-  .app:not(.login-view) input[type="month"]::-webkit-calendar-picker-indicator { transition: none; }
+  .app:not(.login-view) :is(button, a, .choice, input, select, textarea, summary) { transition: none; }
   .app:not(.login-view) details[open] > :not(summary) { animation: none; }
   .app:not(.login-view) :is(button:not(:disabled), .tabs-main a, .seg a):active,
   .app:not(.login-view) :is(.btn:not(.ghost):not(:disabled), .quick button:not(:disabled), .role-action:not(:disabled), .card:not(:disabled), .notice-panel button:not(:disabled)):is(:active, :hover) { transform: none; }

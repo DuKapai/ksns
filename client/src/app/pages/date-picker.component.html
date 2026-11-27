@@ -1,0 +1,31 @@
+<button #trigger type="button" class="date-trigger" [disabled]="disabled" [attr.aria-label]="label + ': ' + displayValue"
+  [attr.aria-expanded]="calendar.open" aria-haspopup="dialog" (click)="open()">
+  <span>{{ displayValue }}</span>
+  <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M7 3v4M17 3v4M3 10h18" /></svg>
+</button>
+<dialog #calendar class="calendar" [attr.aria-label]="'Chọn ' + label.toLowerCase()" (cancel)="cancel($event)"
+  (keydown.escape)="cancel($event)" (click)="backdropClick($event)">
+  <div class="calendar-header">
+    <button type="button" class="calendar-arrow" aria-label="Năm trước" [disabled]="!canShift(-12)" (click)="changeMonth(-12)">«</button>
+    <button type="button" class="calendar-arrow" aria-label="Tháng trước" [disabled]="!canShift(-1)" (click)="changeMonth(-1)">‹</button>
+    <strong aria-live="polite">{{ monthText }}</strong>
+    <button type="button" class="calendar-arrow" aria-label="Tháng sau" [disabled]="!canShift(1)" (click)="changeMonth(1)">›</button>
+    <button type="button" class="calendar-arrow" aria-label="Năm sau" [disabled]="!canShift(12)" (click)="changeMonth(12)">»</button>
+  </div>
+  <div class="calendar-weekdays" aria-hidden="true">
+    @for (weekday of weekdays; track weekday) { <span>{{ weekday }}</span> }
+  </div>
+  <div class="calendar-days" role="group" [attr.aria-label]="monthText">
+    @for (item of days; track $index) {
+      @if (item) {
+        <button type="button" class="calendar-day" [class.selected]="item.value === value" [class.today]="item.value === today"
+          [disabled]="unavailable(item.value)" [attr.aria-label]="'Ngày ' + item.day + ' tháng ' + month + ' năm ' + year"
+          [attr.aria-pressed]="item.value === value" (click)="select(item.value)">{{ item.day }}</button>
+      } @else { <span></span> }
+    }
+  </div>
+  <div class="calendar-footer">
+    <button type="button" (click)="select('')">Xóa</button>
+    <button type="button" [disabled]="unavailable(today)" (click)="select(today)">Hôm nay</button>
+  </div>
+</dialog>

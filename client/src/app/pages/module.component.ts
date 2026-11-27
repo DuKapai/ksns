@@ -5,6 +5,7 @@ import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Subscription, forkJoin, of } from 'rxjs';
 import { ApiService, BROWSER_DEMO, User } from '../core/api.service';
+import { DatePickerComponent } from './date-picker.component';
 
 interface Task { id: string; title: string; area: string; dueDate?: string; }
 interface DemoAccount { username: string; label: string; password: string; }
@@ -139,7 +140,7 @@ const FILTERS: Record<string, (issue: Issue) => boolean> = {
 
 @Component({
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, DatePickerComponent],
   templateUrl: './module.component.html',
   styleUrl: './module.component.css',
 })
