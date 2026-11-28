@@ -7,7 +7,8 @@
     "build": "ng build",
     "build:pages": "node pages-demo/build.mjs && ng build --configuration production,pages --base-href=/ksns/",
     "test:pages": "node pages-demo/build.mjs && node --test pages-demo/browser-api.test.mjs",
-    "test:calendar": "node --test test/date-picker.test.mjs"
+    "test:calendar": "node --test test/date-picker.test.mjs",
+    "test:mobile": "node --test test/mobile-zoom.test.mjs"
   },
   "dependencies": {
     "@angular/common": "^20.3.0",

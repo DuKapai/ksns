@@ -3,7 +3,9 @@ import { provideRouter, withHashLocation } from '@angular/router';
 import { provideHttpClient } from '@angular/common/http';
 import { AppComponent } from './app/app.component';
 import { routes } from './app/app.routes';
+import { preventMobileZoom } from './mobile-zoom';
 
+preventMobileZoom(document);
 const routerFeatures = window.location.hostname.endsWith('.github.io') ? [withHashLocation()] : [];
 
 bootstrapApplication(AppComponent, { providers: [provideRouter(routes, ...routerFeatures), provideHttpClient()] })

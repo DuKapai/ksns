@@ -6,7 +6,9 @@ import { AppComponent } from './app/app.component';
 import { routes } from './app/app.routes';
 import { BROWSER_DEMO } from './app/core/api.service';
 import { dispatch } from './demo-api.generated.mjs';
+import { preventMobileZoom } from './mobile-zoom';
 
+preventMobileZoom(document);
 const demoApi: HttpInterceptorFn = (request, next) => {
   if (!request.url.startsWith('/api/')) return next(request);
   const headers: Record<string, string> = {};
